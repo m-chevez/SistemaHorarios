@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Eliminar aula | Sistema de Horarios{% endblock %}
+
+{% block content %}
+  <div class="row justify-content-center"><div class="col-md-7 col-lg-5">
+    <div class="card border-0 shadow-sm"><div class="card-body p-4">
+      <h1 class="h3">Eliminar aula</h1>
+      <p>¿Confirmas que deseas eliminar <strong>{{ aula.nombreAula }}</strong> ({{ aula.idAula }})?</p>
+      <form method="post" action="{% url 'confirmar_eliminar_aula' aula.pk %}">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit">Eliminar</button>
+        <a class="btn btn-outline-secondary" href="{% url 'aulas' %}">Cancelar</a>
+      </form>
+    </div></div>
+  </div></div>
+{% endblock %}
