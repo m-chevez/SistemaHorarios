@@ -1,60 +1,32 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inicio - Sistema</title>
-    <!-- CSS only -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css" rel="stylesheet"
-        integrity="sha384-gH2yIJqKdNHPEq0n4Mqa/HGKIhSkIHeL5AyhkYV8i59U5AR6csBvApHHNl/vI1Bx" crossorigin="anonymous">
-    <style>
-        body {
-            background-color: #f8f9fa;
-            margin-top: 20px;
-        }
-        .navbar {
-            margin-bottom: 20px;
-        }
-        .container {
-            text-align: center;
-        }
-        .btn {
-            margin: 60px;
-            width: 300px;
-            font-size: 1.1em;
-        }
-        .btn-primary {
-            background-color: #007bff;
-            border-color: #007bff;
-        }
-        .btn-primary:hover {
-            background-color: #0056b3;
-            border-color: #004085;
-        }
-    </style>
-</head>
-<body>
-    <header>
-        
-    </header>
-    
-    <div class="container">
-        <h1>Opciones del Sistema</h1>
-        <div class="row">
-            <div class="col-md-4">
-                <a href="/formDocente" class="btn btn-primary">Formulario de Docentes</a>
-            </div>
-            <div class="col-md-4">
-                <a href="/formClase" class="btn btn-primary">Formulario de Clases</a>
-            </div>
-            <div class="col-md-4">
-                <a href="/generarHorario" class="btn btn-primary">Generar Horario</a>
-            </div>
-        </div>
+{% extends "base.html" %}
+
+{% block title %}Inicio | Sistema de Horarios{% endblock %}
+
+{% block content %}
+  <div class="mb-4">
+    <h1 class="h2">Opciones del sistema</h1>
+    <p class="text-secondary mb-0">Selecciona una sección para administrar o generar horarios.</p>
+  </div>
+  <div class="row g-3">
+    <div class="col-md-6 col-xl-3">
+      <a class="card h-100 text-decoration-none shadow-sm" href="{% url 'formDocente' %}">
+        <div class="card-body"><h2 class="h5 text-primary">Docentes</h2><p class="text-secondary mb-0">Gestionar el personal docente.</p></div>
+      </a>
     </div>
-    
-    <!-- JavaScript Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js"
-        integrity="sha384-A3rJD856KowSb7dwlZdYEkO39Gagi7vIsF0jrRAoQmDKKtQBHUuLZ9AsSv4jD4Xa" crossorigin="anonymous"></script>
-</body>
-</html>
+    <div class="col-md-6 col-xl-3">
+      <a class="card h-100 text-decoration-none shadow-sm" href="{% url 'formClase' %}">
+        <div class="card-body"><h2 class="h5 text-primary">Clases</h2><p class="text-secondary mb-0">Administrar clases y matrícula.</p></div>
+      </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+      <a class="card h-100 text-decoration-none shadow-sm" href="{% url 'aulas' %}">
+        <div class="card-body"><h2 class="h5 text-primary">Aulas</h2><p class="text-secondary mb-0">Administrar aulas y laboratorios.</p></div>
+      </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+      <a class="card h-100 text-decoration-none shadow-sm" href="{% url 'generarHorario' %}">
+        <div class="card-body"><h2 class="h5 text-primary">Horario</h2><p class="text-secondary mb-0">Generar y consultar el horario semanal.</p></div>
+      </a>
+    </div>
+  </div>
+{% endblock %}

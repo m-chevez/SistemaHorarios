@@ -1,129 +1,48 @@
-<html>
+{% extends "base.html" %}
 
-<head>
-  <!-- CSS only -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css" rel="stylesheet"
-    integrity="sha384-gH2yIJqKdNHPEq0n4Mqa/HGKIhSkIHeL5AyhkYV8i59U5AR6csBvApHHNl/vI1Bx" crossorigin="anonymous">
-  <!-- JavaScript Bundle with Popper -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js"
-    integrity="sha384-A3rJD856KowSb7dwlZdYEkO39Gagi7vIsF0jrRAoQmDKKtQBHUuLZ9AsSv4jD4Xa" crossorigin="anonymous">
-  </script>
-  <style>
-    .subfila {
-      border: 1px solid #dee2e6;
-      padding: 5px;
-      margin-bottom: 5px;
-      border-radius: 3px;
-    }
-    .header-subfila {
-      font-weight: bold;
-      margin-bottom: 5px;
-    }
-  </style>
-</head>
+{% block title %}Horario semanal | Sistema de Horarios{% endblock %}
 
-<body>
-  <header>
-    <nav class="navbar navbar-expand-lg bg-light">
-      <div class="container-fluid">
-        <a class="navbar-brand" href="#">Sistema</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
-          aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarSupportedContent">
-          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            <li class="nav-item">
-              <a class="nav-link active" aria-current="page" href="/home">Inicio</a>
-            </li>
-            <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-                aria-expanded="false">
-                Opciones del Sistema
-              </a>
-              <ul class="dropdown-menu">
-                <li><a class="dropdown-item" href="/formDocente">Formulario de Docentes</a></li>
-                <li>
-                  <hr class="dropdown-divider">
-                </li>
-                <li><a class="dropdown-item" href="/formClase">Formulario de Clases</a></li>
-                <li>
-                  <hr class="dropdown-divider">
-                </li>
-                <li><a class="dropdown-item" href="/generarHorario">Generar Horario</a></li>
-              </ul>
-            </li>
-          </ul>
-        </div>
-      </div>
-    </nav>
-  </header>
-
-  <div class="container mt-4">
-    <h2 class="text-center">Horario Semanal</h2>
-    
-    <!-- Formulario de Filtro -->
-    <form method="get" action="{% url 'filtrarHorario' %}">
-      <div class="row mb-3">
-        <div class="col">
-          <input type="text" class="form-control" name="hora" placeholder="Hora (ej. 7)" value="{{ request.GET.hora }}">
-        </div>
-        <div class="col">
-          <input type="text" class="form-control" name="docente" placeholder="Docente ID" value="{{ request.GET.docente }}">
-        </div>
-        <div class="col">
-          <input type="text" class="form-control" name="clase" placeholder="Clase ID" value="{{ request.GET.clase }}">
-        </div>
-        <div class="col">
-          <input type="text" class="form-control" name="aula" placeholder="Aula ID" value="{{ request.GET.aula }}">
-        </div>
-        <div class="col">
+{% block content %}
+  <h1 class="h2 text-center mb-4">Horario semanal</h1>
+  <form method="get" action="{% url 'filtrarHorario' %}" class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-sm-6 col-lg"><label class="form-label" for="hora">Hora</label><input id="hora" type="number" min="7" max="18" class="form-control" name="hora" placeholder="7 a 18" value="{{ request.GET.hora }}"></div>
+        <div class="col-sm-6 col-lg"><label class="form-label" for="docente">Docente</label><input id="docente" type="text" class="form-control" name="docente" placeholder="Identidad" value="{{ request.GET.docente }}"></div>
+        <div class="col-sm-6 col-lg"><label class="form-label" for="clase">Clase</label><input id="clase" type="text" class="form-control" name="clase" placeholder="Código" value="{{ request.GET.clase }}"></div>
+        <div class="col-sm-6 col-lg"><label class="form-label" for="aula">Aula</label><input id="aula" type="text" class="form-control" name="aula" placeholder="Código" value="{{ request.GET.aula }}"></div>
+        <div class="col-lg-auto d-flex gap-2">
           <button type="submit" class="btn btn-primary">Filtrar</button>
-          <a href="{% url 'filtrarHorario' %}" class="btn btn-secondary">Restaurar</a>
-        </div>
-        <div class="col">
-            <button type="submit" formaction="{% url 'descargarHorario' %}" class="btn btn-success">Descargar PDF</button>
+          <a href="{% url 'filtrarHorario' %}" class="btn btn-outline-secondary">Restaurar</a>
+          <button type="submit" formaction="{% url 'descargarHorario' %}" class="btn btn-success">PDF</button>
         </div>
       </div>
-    </form>
-
-    <table class="table table-bordered">
-      <thead>
-        <tr>
-          <th>Hora</th>
-          <th>Lunes</th>
-          <th>Martes</th>
-          <th>Miércoles</th>
-          <th>Jueves</th>
-          <th>Viernes</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for hora in horas %}
-        <tr>
-          <td>{{ hora }}:00</td>
-          {% for dia in dias %}
-          <td>
-            {% for slot in horario %}
-            {% if slot.hora == hora and slot.idClase.uv > dia %}
-            <hr style="border: 0; height: 3px; background: black;">
-            <div class="subfila">
-              <div class="header-subfila">Clase:</div>
-              {{ slot.idClase.id }} - {{ slot.idClase.clase }}<br>
-              <div class="header-subfila">Docente:</div>
-              {{ slot.idDocente.id }} - {{ slot.idDocente.nombre }}<br>
-              <div class="header-subfila">Aula:</div>
-              {{ slot.idAula.idAula }} - {{ slot.idAula.nombreAula }}
-            </div>
-            {% endif %}
-            {% endfor %}
-          </td>
+    </div>
+  </form>
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle mb-0">
+        <thead class="table-light"><tr><th>Hora</th><th>Lunes</th><th>Martes</th><th>Miércoles</th><th>Jueves</th><th>Viernes</th></tr></thead>
+        <tbody>
+          {% for hora in horas %}
+            <tr><th scope="row">{{ hora }}:00</th>
+              {% for dia in dias %}
+                <td>
+                  {% for slot in horario %}
+                    {% if slot.hora == hora and slot.idClase.uv > dia %}
+                      <div class="border rounded p-2 mb-2">
+                        <strong>Clase:</strong> {{ slot.idClase.id }} - {{ slot.idClase.clase }}<br>
+                        <strong>Docente:</strong> {{ slot.idDocente.id }} - {{ slot.idDocente.nombre }}<br>
+                        <strong>Aula:</strong> {{ slot.idAula.idAula }} - {{ slot.idAula.nombreAula }}
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </td>
+              {% endfor %}
+            </tr>
           {% endfor %}
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </div>
   </div>
-</body>
-
-</html>
+{% endblock %}
