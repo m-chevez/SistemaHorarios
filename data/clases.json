@@ -1,0 +1,26 @@
+[
+    {
+        "id": "MM-110",
+        "clase": "Matematica I",
+        "uv": 4,
+        "cantidadEM": 20
+    },
+    {
+        "id": "IS1",
+        "clase": "Microcontroladores",
+        "uv": 4,
+        "cantidadEM": 20
+    },
+    {
+        "id": "IS-410",
+        "clase": "POO",
+        "uv": 5,
+        "cantidadEM": 10
+    },
+    {
+        "id": "IS-412",
+        "clase": "Sistemas Operativos I",
+        "uv": 3,
+        "cantidadEM": 10
+    }
+]

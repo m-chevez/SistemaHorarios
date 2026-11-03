@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Horario Filtrado</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 6px; 
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .subfila {
+            border-top: 1px solid #ddd;
+            padding: 2px; 
+            margin-top: 2px; 
+            font-size: 0.9em; 
+        }
+        .header-subfila {
+            font-weight: bold;
+            margin-bottom: 2px; 
+        }
+    </style>
+</head>
+<body>
+    <h1>Horario</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Hora</th>
+                <th>Lunes</th>
+                <th>Martes</th>
+                <th>Miércoles</th>
+                <th>Jueves</th>
+                <th>Viernes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for hora in horas %}
+            <tr>
+                <td>{{ hora }}:00</td>
+                {% for dia in dias %}
+                <td>
+                    {% for slot in horario %}
+                    {% if slot.hora == hora and slot.idClase.uv > dia %}
+                    <hr>
+                    <div class="subfila">
+                        <div class="header-subfila">Clase:</div>
+                        {{ slot.idClase.id }} - {{ slot.idClase.clase }}<br>
+                        <div class="header-subfila">Docente:</div>
+                        {{ slot.idDocente.id }} - {{ slot.idDocente.nombre }}<br>
+                        <div class="header-subfila">Aula:</div>
+                        {{ slot.idAula.idAula }} - {{ slot.idAula.nombreAula }}
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

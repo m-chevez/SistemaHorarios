@@ -1,0 +1,14 @@
+[
+    {
+        "idAula": "LI",
+        "nombreAula": "Lab de informatica"
+    },
+    {
+        "idAula": "laIS",
+        "nombreAula": "Lab IS"
+    },
+    {
+        "idAula": "N",
+        "nombreAula": "Lab IS"
+    }
+]

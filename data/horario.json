@@ -1,0 +1,26 @@
+[
+    {
+        "idClase": "MM-110",
+        "idDocente": "13",
+        "idAula": "N",
+        "hora": 7
+    },
+    {
+        "idClase": "IS1",
+        "idDocente": "3",
+        "idAula": "LI",
+        "hora": 7
+    },
+    {
+        "idClase": "IS-410",
+        "idDocente": "06011990",
+        "idAula": "laIS",
+        "hora": 7
+    },
+    {
+        "idClase": "IS-412",
+        "idDocente": "89897",
+        "idAula": "LI",
+        "hora": 8
+    }
+]
