@@ -2,75 +2,219 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Horario Filtrado</title>
+    <title>Horario Academico - UNAH Campus Choluteca</title>
     <style>
+        @page {
+            size: A4 landscape;
+            margin: 1cm 0.8cm;
+        }
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
-            color: #333;
+            margin: 0;
+            padding: 0;
+            color: #1a1a2e;
+            font-size: 7.5pt;
         }
-        h1 {
+
+        /* ── Encabezado ── */
+        .header-table {
+            width: 100%;
+            margin-bottom: 6px;
+            border-bottom: 3px solid #1E3A8A;
+            padding-bottom: 5px;
+        }
+        .header-table td {
+            border: none;
+            padding: 0 4px;
+            vertical-align: middle;
+        }
+        .logo-ing {
+            width: 64px;
+            height: 64px;
+        }
+        .logo-unah {
+            height: 42px;
+        }
+        .titulo-principal {
+            font-size: 13pt;
+            font-weight: bold;
+            color: #1E3A8A;
             text-align: center;
-            margin-bottom: 20px;
+            margin: 0;
         }
-        table {
+        .subtitulo {
+            font-size: 8pt;
+            color: #64748B;
+            text-align: center;
+            margin: 2px 0 0 0;
+        }
+        .fecha {
+            font-size: 6.5pt;
+            color: #94A3B8;
+            text-align: center;
+            margin: 1px 0 0 0;
+        }
+
+        /* ── Estadísticas ── */
+        .stats-table {
+            width: 100%;
+            margin-bottom: 6px;
+            border-collapse: separate;
+            border-spacing: 4px;
+        }
+        .stats-table td {
+            background-color: #EFF6FF;
+            border: 1px solid #BFDBFE;
+            text-align: center;
+            padding: 3px 6px;
+            border-radius: 3px;
+        }
+        .stat-num {
+            font-size: 11pt;
+            font-weight: bold;
+            color: #1E3A8A;
+        }
+        .stat-lbl {
+            font-size: 6pt;
+            color: #64748B;
+        }
+
+        /* ── Tabla de horario ── */
+        .horario-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin-bottom: 6px;
         }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 6px; 
-            text-align: left;
+        .horario-table th {
+            background-color: #1E3A8A;
+            color: #ffffff;
+            font-weight: bold;
+            padding: 4px 3px;
+            text-align: center;
+            border: 1px solid #93C5FD;
+            font-size: 8pt;
         }
-        th {
-            background-color: #f4f4f4;
+        .horario-table td {
+            border: 1px solid #CBD5E1;
+            padding: 3px;
+            vertical-align: top;
+            font-size: 6.5pt;
+        }
+        .hora-col {
+            background-color: #EFF6FF;
+            font-weight: bold;
+            text-align: center;
+            color: #1E3A8A;
+            vertical-align: middle;
+            width: 55px;
+            font-size: 7pt;
+        }
+        .even-row td {
+            background-color: #F8FAFC;
+        }
+
+        /* ── Tarjeta de clase ── */
+        .clase-card {
+            background-color: #EFF6FF;
+            border-left: 3px solid #1E3A8A;
+            padding: 2px 3px;
+            margin-bottom: 2px;
+        }
+        .clase-nombre {
+            font-weight: bold;
+            color: #1E3A8A;
+            font-size: 6.5pt;
+        }
+        .clase-detalle {
+            color: #475569;
+            font-size: 6pt;
+        }
+        .censo-badge {
+            background-color: #DBEAFE;
+            color: #1E40AF;
+            padding: 0px 2px;
+            font-size: 6pt;
             font-weight: bold;
         }
-        tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
-        .subfila {
-            border-top: 1px solid #ddd;
-            padding: 2px; 
-            margin-top: 2px; 
-            font-size: 0.9em; 
-        }
-        .header-subfila {
-            font-weight: bold;
-            margin-bottom: 2px; 
+
+        /* ── Pie ── */
+        .footer {
+            border-top: 2px solid #1E3A8A;
+            padding-top: 3px;
+            font-size: 6pt;
+            color: #64748B;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <h1>Horario</h1>
-    <table>
+
+    <!-- Encabezado con Logos -->
+    <table class="header-table">
+        <tr>
+            <td style="width:70px; text-align:left;">
+                <img src="{{ logo_ingenieria_path }}" class="logo-ing" alt="Ing. Sistemas UNAH">
+            </td>
+            <td style="text-align:center;">
+                <p class="titulo-principal">HORARIO ACADEMICO</p>
+                <p class="subtitulo">Ingenieria en Sistemas &mdash; UNAH Campus Choluteca</p>
+                <p class="fecha">Generado el: {{ fecha_generacion }} &nbsp;|&nbsp; Periodo: {{ periodo }}</p>
+            </td>
+            <td style="width:160px; text-align:right;">
+                <img src="{{ logo_unah_path }}" class="logo-unah" alt="UNAH Campus Choluteca">
+            </td>
+        </tr>
+    </table>
+
+    <!-- Estadísticas Resumen -->
+    <table class="stats-table">
+        <tr>
+            <td>
+                <div class="stat-num">{{ total_asignaciones }}</div>
+                <div class="stat-lbl">Clases Asignadas</div>
+            </td>
+            <td>
+                <div class="stat-num">{{ total_estudiantes_censo }}</div>
+                <div class="stat-lbl">Estudiantes en Censo</div>
+            </td>
+            <td>
+                <div class="stat-num">{{ total_registros_censo }}</div>
+                <div class="stat-lbl">Registros de Censo</div>
+            </td>
+            <td>
+                <div class="stat-num">{{ periodo }}</div>
+                <div class="stat-lbl">Periodo Academico</div>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Tabla de Horario Semanal -->
+    <table class="horario-table">
         <thead>
             <tr>
                 <th>Hora</th>
                 <th>Lunes</th>
                 <th>Martes</th>
-                <th>Miércoles</th>
+                <th>Miercoles</th>
                 <th>Jueves</th>
                 <th>Viernes</th>
             </tr>
         </thead>
         <tbody>
             {% for hora in horas %}
-            <tr>
-                <td>{{ hora }}:00</td>
+            <tr {% if forloop.counter|divisibleby:2 %}class="even-row"{% endif %}>
+                <td class="hora-col">{{ hora }}:00<br>-<br>{{ hora|add:1 }}:00</td>
                 {% for dia in dias %}
                 <td>
                     {% for slot in horario %}
                     {% if slot.hora == hora and slot.idClase.uv > dia %}
-                    <hr>
-                    <div class="subfila">
-                        <div class="header-subfila">Clase:</div>
-                        {{ slot.idClase.id }} - {{ slot.idClase.clase }}<br>
-                        <div class="header-subfila">Docente:</div>
-                        {{ slot.idDocente.id }} - {{ slot.idDocente.nombre }}<br>
-                        <div class="header-subfila">Aula:</div>
-                        {{ slot.idAula.idAula }} - {{ slot.idAula.nombreAula }}
+                    <div class="clase-card">
+                        <div class="clase-nombre">{{ slot.idClase.id }} - {{ slot.idClase.clase }}</div>
+                        <div class="clase-detalle">
+                            Docente: {{ slot.idDocente.nombre }} {{ slot.idDocente.apellido }}<br>
+                            Aula: {{ slot.idAula.nombreAula }} (Cap: {{ slot.idAula.capacidad }})
+                        </div>
+                        <div class="censo-badge">Censo: {{ slot.censo_count }} est.</div>
                     </div>
                     {% endif %}
                     {% endfor %}
@@ -80,5 +224,14 @@
             {% endfor %}
         </tbody>
     </table>
+
+    <!-- Pie de pagina -->
+    <div class="footer">
+        Universidad Nacional Autonoma de Honduras (UNAH) &nbsp;|&nbsp;
+        Campus Choluteca &nbsp;|&nbsp;
+        Carrera: Ingenieria en Sistemas &nbsp;|&nbsp;
+        Documento generado automaticamente por el Sistema de Horarios
+    </div>
+
 </body>
 </html>

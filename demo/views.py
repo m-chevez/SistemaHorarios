@@ -248,45 +248,63 @@ def censo_global(request):
 @login_required
 @require_POST
 def censo_cargar_datos_prueba(request):
-    """Genera datos de censo de muestra para varios estudiantes para pruebas de optimización."""
+    """
+    Genera datos de censo de muestra usando los IDs de clase reales presentes en la BD.
+    Crea 12 estudiantes de prueba y les asigna entre 2 y 4 clases con hora tentativa aleatoria.
+    """
     clases_disponibles = list(Clase.objects.all())
     if not clases_disponibles:
         messages.error(request, 'Primero registra clases en el sistema para generar datos de censo.')
         return redirect('censo_global')
 
-    estudiantes_muestra = [
-        ('20211001001', 'Carlos Mendoza', ['001', '005', '006', '008']),
-        ('20211002002', 'María José López', ['001', '002', '007', '013']),
-        ('20221003003', 'Luis Fernando Torres', ['002', '003', '004', '005']),
-        ('20221004004', 'Andrea Sofía Castro', ['006', '007', '010', '014']),
-        ('20231005005', 'Kevin David Ramos', ['003', '004', '012', '013']),
-        ('20231006006', 'Valeria Nicole Paz', ['005', '006', '014', '008']),
-        ('20201007007', 'Gabriel Antonio Ruiz', ['001', '007', '010', '012']),
-        ('20221008008', 'Daniela Alejandra Meza', ['002', '008', '013', '014']),
+    # Perfiles de estudiantes de muestra (10 estudiantes fijos + 2 extra)
+    nombres_muestra = [
+        ('20211001001', 'Carlos Mendoza'),
+        ('20211002002', 'María José López'),
+        ('20221003003', 'Luis Fernando Torres'),
+        ('20221004004', 'Andrea Sofía Castro'),
+        ('20231005005', 'Kevin David Ramos'),
+        ('20231006006', 'Valeria Nicole Paz'),
+        ('20201007007', 'Gabriel Antonio Ruiz'),
+        ('20221008008', 'Daniela Alejandra Meza'),
+        ('20231009009', 'Roberto Ernesto Flores'),
+        ('20211010010', 'Paola Stephanie Mejía'),
+        ('20231011011', 'Diego Alejandro Murillo'),
+        ('20221012012', 'Cindy Paola Reyes'),
     ]
 
-    clases_dict = {c.id: c for c in clases_disponibles}
-    horas_preferidas_posibles = [7, 8, 9, 10, 11, 13, 14, 15, 16]
+    horas_preferidas = [7, 8, 9, 10, 11, 13, 14, 15, 16]
+    n_clases = len(clases_disponibles)
 
     creados_count = 0
-    for cuenta, nombre, codigos in estudiantes_muestra:
+    for i, (cuenta, nombre) in enumerate(nombres_muestra):
         estudiante, _ = Estudiante.objects.get_or_create(
             numero_cuenta=cuenta,
             defaults={'nombre': nombre},
         )
-        for cod in codigos:
-            if cod in clases_dict:
-                clase_obj = clases_dict[cod]
-                hora_tentativa = random.choice(horas_preferidas_posibles)
-                _, created = CensoEstudiante.objects.get_or_create(
-                    estudiante=estudiante,
-                    clase=clase_obj,
-                    defaults={'hora_tentativa': hora_tentativa},
-                )
-                if created:
-                    creados_count += 1
 
-    messages.success(request, f'Se cargaron con éxito datos de censo de prueba ({creados_count} selecciones de materias registradas).')
+        # Cada estudiante elige entre 2 y min(4, total_clases) clases
+        # Se distribuyen de forma circular para garantizar cobertura uniforme
+        num_clases_a_elegir = min(random.randint(2, 4), n_clases)
+        # Rotación para que cada estudiante tenga una combinación distinta
+        offset = (i * 3) % n_clases
+        clases_elegidas = [clases_disponibles[(offset + j) % n_clases] for j in range(num_clases_a_elegir)]
+
+        for clase_obj in clases_elegidas:
+            hora_tentativa = random.choice(horas_preferidas)
+            _, created = CensoEstudiante.objects.get_or_create(
+                estudiante=estudiante,
+                clase=clase_obj,
+                defaults={'hora_tentativa': hora_tentativa},
+            )
+            if created:
+                creados_count += 1
+
+    messages.success(
+        request,
+        f'Datos de censo de prueba cargados: {len(nombres_muestra)} estudiantes, '
+        f'{creados_count} selecciones de materias nuevas registradas.',
+    )
     return redirect('censo_global')
 
 
@@ -752,18 +770,30 @@ def _render_horario(request, horario):
     clases_filtro = Clase.objects.all()
     aulas_filtro = Aula.objects.all()
 
+    # Enriquecer cada slot con conteo de censo estudiantil
+    horario_lista = list(horario)
+    censo_counts = {
+        row['clase_id']: row['total']
+        for row in CensoEstudiante.objects.values('clase_id').annotate(total=Count('id'))
+    }
+    for slot in horario_lista:
+        slot.censo_count = censo_counts.get(slot.idClase_id, 0)
+
+    total_estudiantes_censo = Estudiante.objects.count()
+
     return render(
         request,
         'horario.html',
         {
-            'horario': horario,
+            'horario': horario_lista,
             'horas': range(7, 19),
             'dias': range(5),
             'diagnostico': diagnostico,
             'docentes_filtro': docentes_filtro,
             'clases_filtro': clases_filtro,
             'aulas_filtro': aulas_filtro,
-            'total_asignaciones': horario.count(),
+            'total_asignaciones': len(horario_lista),
+            'total_estudiantes_censo': total_estudiantes_censo,
         },
     )
 
@@ -820,13 +850,50 @@ def descargarHorarioExcel(request):
 
 @session_usuario_requerida
 def descargarHorario(request):
-    """Descarga el horario en formato PDF."""
+    """Descarga el horario en formato PDF con logos institucionales y datos de censo."""
+    import os
+    from datetime import datetime as _datetime
+
+    horario_qs = list(_horario_filtrado(request))
+
+    # Mapa de conteo de censo por clase
+    censo_counts = {
+        row['clase_id']: row['total']
+        for row in CensoEstudiante.objects.values('clase_id').annotate(total=Count('id'))
+    }
+
+    # Adjuntar conteo de censo a cada slot
+    for slot in horario_qs:
+        slot.censo_count = censo_counts.get(slot.idClase_id, 0)
+
+    # Rutas absolutas de logos para xhtml2pdf (preferencia por .png)
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    def _find_img(name):
+        for ext in ('.png', '.jpg', '.jpeg'):
+            p = os.path.join(base_dir, 'static', 'img', f'{name}{ext}')
+            if os.path.isfile(p):
+                return p.replace('\\', '/')
+        return ''
+
+    logo_ingenieria = _find_img('logo_ingenieria')
+    logo_unah = _find_img('logo_unah')
+
+    total_estudiantes_censo = Estudiante.objects.count()
+    total_registros_censo = CensoEstudiante.objects.count()
+
     html_string = render_to_string(
         'horario_pdf.html',
         {
-            'horario': _horario_filtrado(request),
+            'horario': horario_qs,
             'horas': range(7, 19),
             'dias': range(5),
+            'logo_ingenieria_path': logo_ingenieria,
+            'logo_unah_path': logo_unah,
+            'total_asignaciones': len(horario_qs),
+            'total_estudiantes_censo': total_estudiantes_censo,
+            'total_registros_censo': total_registros_censo,
+            'fecha_generacion': _datetime.now().strftime('%d/%m/%Y %H:%M'),
+            'periodo': _datetime.now().strftime('%Y'),
         },
         request=request,
     )
@@ -836,5 +903,5 @@ def descargarHorario(request):
         messages.error(request, 'No se pudo generar el PDF del horario.')
         return redirect('filtrarHorario')
     response = HttpResponse(result.getvalue(), content_type='application/pdf')
-    response['Content-Disposition'] = 'attachment; filename="horario.pdf"'
+    response['Content-Disposition'] = 'attachment; filename="horario_academico_unah.pdf"'
     return response
