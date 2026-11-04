@@ -16,6 +16,13 @@ class Docente(models.Model):
         validators=(MinValueValidator(8), MaxValueValidator(19)),
         verbose_name='Hora fin disponibilidad',
     )
+    carga_maxima_uv = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+        validators=(MinValueValidator(1),),
+        verbose_name='Carga académica máxima (UV)',
+        help_text='Máximo de unidades valorativas que puede impartir en el horario generado.',
+    )
 
     class Meta:
         ordering = ('apellido', 'nombre')
@@ -24,6 +31,14 @@ class Docente(models.Model):
 
     def __str__(self):
         return f'{self.nombre} {self.apellido}'
+
+    @property
+    def carga_academica_actual(self):
+        if hasattr(self, '_carga_academica_actual'):
+            return self._carga_academica_actual
+        return self.asignaciones.aggregate(
+            total=models.Sum('idClase__uv'),
+        )['total'] or 0
 
 
 class Aula(models.Model):

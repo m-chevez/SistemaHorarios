@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.db.models import Sum, Value
+from django.db.models.functions import Coalesce
 
 from .models import Aula, Clase, Docente, Horario, PreferenciaDocenteClase
 
@@ -11,9 +13,25 @@ class PreferenciaInline(admin.TabularInline):
 
 @admin.register(Docente)
 class DocenteAdmin(admin.ModelAdmin):
-    list_display = ('id', 'nombre', 'apellido', 'hora_inicio', 'hora_fin')
+    list_display = (
+        'id',
+        'nombre',
+        'apellido',
+        'carga_academica_actual',
+        'carga_maxima_uv',
+        'hora_inicio',
+        'hora_fin',
+    )
     search_fields = ('id', 'nombre', 'apellido')
     inlines = (PreferenciaInline,)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(
+            _carga_academica_actual=Coalesce(
+                Sum('asignaciones__idClase__uv'),
+                Value(0),
+            ),
+        )
 
 
 @admin.register(Aula)

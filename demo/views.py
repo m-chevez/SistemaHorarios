@@ -5,6 +5,8 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Sum, Value
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -81,7 +83,13 @@ def home(request):
 
 @login_required
 def formDocente(request):
-    return render(request, 'formDocente.html', {'lista': Docente.objects.all()})
+    lista = Docente.objects.annotate(
+        _carga_academica_actual=Coalesce(
+            Sum('asignaciones__idClase__uv'),
+            Value(0),
+        ),
+    )
+    return render(request, 'formDocente.html', {'lista': lista})
 
 
 @login_required
@@ -329,7 +337,13 @@ def confirmar_eliminar_aula(request, pk):
 
 # ─── Algoritmo de generación de horario ────────────────────────────────────
 
-def _seleccionar_docente(docentes_candidatos, hora, ocupacion):
+def _seleccionar_docente(
+    docentes_candidatos,
+    hora,
+    carga_clase,
+    carga_actual,
+    ocupacion,
+):
     """
     Dado una lista de candidatos ya ordenada por preferencia/prioridad,
     devuelve el primer docente disponible en esa hora según su
@@ -341,6 +355,9 @@ def _seleccionar_docente(docentes_candidatos, hora, ocupacion):
         if docente.pk in docentes_ocupados:
             continue
         if docente.hora_inicio <= hora < docente.hora_fin:
+            carga_maxima = docente.carga_maxima_uv
+            if carga_maxima is not None and carga_actual.get(docente.pk, 0) + carga_clase > carga_maxima:
+                continue
             return docente
     return None
 
@@ -361,7 +378,7 @@ def generarHorario(request):
 
         # Pre-construir mapa de docentes habilitados por clase, ordenados por prioridad
         # Si una clase no tiene preferencias configuradas, todos los docentes son candidatos (prioridad neutra)
-        preferencias_map = {}  # clase_pk -> lista de docentes ordenada por prioridad asc
+        preferencias_map = {}  # clase_pk -> candidatos ordenados por prioridad
         for clase_obj in clases:
             prefs = list(
                 PreferenciaDocenteClase.objects
@@ -370,8 +387,18 @@ def generarHorario(request):
                 .order_by('prioridad')
             )
             if prefs:
-                # Solo los docentes que tienen preferencia declarada para esa clase
-                preferencias_map[clase_obj.pk] = [p.docente for p in prefs]
+                # Mantener los niveles de prioridad y sortear solo los empates.
+                candidatos = []
+                prioridades = sorted({preferencia.prioridad for preferencia in prefs})
+                for prioridad in prioridades:
+                    grupo = [
+                        preferencia.docente
+                        for preferencia in prefs
+                        if preferencia.prioridad == prioridad
+                    ]
+                    random.shuffle(grupo)
+                    candidatos.extend(grupo)
+                preferencias_map[clase_obj.pk] = candidatos
             else:
                 # Sin restricciones: todos los docentes son candidatos, en orden aleatorio
                 candidatos = list(docentes_todos)
@@ -379,6 +406,7 @@ def generarHorario(request):
                 preferencias_map[clase_obj.pk] = candidatos
 
         asignaciones = []
+        carga_docente = {docente.pk: 0 for docente in docentes_todos}
         ocupacion = {}  # hora -> {'docentes': set(pk), 'aulas': set(pk)}
         clases_sin_espacio = []
 
@@ -388,7 +416,13 @@ def generarHorario(request):
             for hora in range(7, 19):
                 hora_ocupada = ocupacion.setdefault(hora, {'docentes': set(), 'aulas': set()})
 
-                docente = _seleccionar_docente(candidatos_docente, hora, ocupacion)
+                docente = _seleccionar_docente(
+                    candidatos_docente,
+                    hora,
+                    clase_obj.uv,
+                    carga_docente,
+                    ocupacion,
+                )
                 if docente is None:
                     continue
 
@@ -411,6 +445,7 @@ def generarHorario(request):
                 )
                 hora_ocupada['docentes'].add(docente.pk)
                 hora_ocupada['aulas'].add(aula.pk)
+                carga_docente[docente.pk] += clase_obj.uv
                 asignado = True
                 break
 
@@ -423,7 +458,7 @@ def generarHorario(request):
                 request,
                 f'No se pudo asignar {len(clases_sin_espacio)} clase(s): {nombres}. '
                 'No hay suficientes docentes disponibles, aulas con capacidad adecuada '
-                'o espacios horarios libres para completar la asignación.',
+                'o espacios horarios/carga académica libres para completar la asignación.',
             )
         else:
             with transaction.atomic():

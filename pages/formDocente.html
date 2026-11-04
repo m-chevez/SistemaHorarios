@@ -15,6 +15,7 @@
             <th>Identidad</th>
             <th>Nombre</th>
             <th>Apellido</th>
+            <th>Carga académica (UV)</th>
             <th>Disponibilidad</th>
             <th>Clases habilitadas</th>
             <th class="text-end">Acciones</th>
@@ -26,6 +27,7 @@
               <td>{{ docente.id }}</td>
               <td>{{ docente.nombre }}</td>
               <td>{{ docente.apellido }}</td>
+              <td>{{ docente.carga_academica_actual }} / {% if docente.carga_maxima_uv %}{{ docente.carga_maxima_uv }}{% else %}Sin límite{% endif %}</td>
               <td class="text-nowrap">{{ docente.hora_inicio }}:00 – {{ docente.hora_fin }}:00</td>
               <td>
                 {% with total=docente.preferencias_clases.count %}
@@ -43,7 +45,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td class="text-center text-secondary py-4" colspan="6">Todavía no hay docentes registrados.</td></tr>
+            <tr><td class="text-center text-secondary py-4" colspan="7">Todavía no hay docentes registrados.</td></tr>
           {% endfor %}
         </tbody>
       </table>

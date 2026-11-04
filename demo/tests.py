@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Aula, Clase, Docente, Horario
+from .models import Aula, Clase, Docente, Horario, PreferenciaDocenteClase
 
 
 class LegacyCatalogMigrationTests(TestCase):
@@ -88,7 +88,12 @@ class CatalogCrudTests(TestCase):
     def test_docente_crud_uses_orm_and_validates_duplicate_primary_key(self):
         response = self.client.post(
             reverse('insert_docente'),
-            {'id': '12345', 'nombre': 'Ana', 'apellido': 'Pérez'},
+            {
+                'id': '12345',
+                'nombre': 'Ana',
+                'apellido': 'Pérez',
+                'carga_maxima_uv': '15',
+            },
         )
         self.assertRedirects(response, reverse('formDocente'))
         docente = Docente.objects.get(pk='12345')
@@ -103,14 +108,24 @@ class CatalogCrudTests(TestCase):
 
         invalid = self.client.post(
             reverse('insert_docente'),
-            {'id': '12345', 'nombre': 'Otra', 'apellido': 'Persona'},
+            {
+                'id': '12345',
+                'nombre': 'Otra',
+                'apellido': 'Persona',
+                'carga_maxima_uv': '15',
+            },
         )
         self.assertEqual(invalid.status_code, 400)
         self.assertEqual(Docente.objects.count(), 1)
 
         response = self.client.post(
             reverse('update_docente'),
-            {'id': docente.pk, 'nombre': 'Ana María', 'apellido': 'Pérez'},
+            {
+                'id': docente.pk,
+                'nombre': 'Ana María',
+                'apellido': 'Pérez',
+                'carga_maxima_uv': '20',
+            },
         )
         self.assertRedirects(response, reverse('formDocente'))
         docente.refresh_from_db()
@@ -119,6 +134,21 @@ class CatalogCrudTests(TestCase):
         response = self.client.post(reverse('delete_docente'), {'id': docente.pk})
         self.assertRedirects(response, reverse('formDocente'))
         self.assertFalse(Docente.objects.exists())
+
+    def test_docente_requires_a_positive_academic_load_limit(self):
+        response = self.client.post(
+            reverse('insert_docente'),
+            {'id': 'D1', 'nombre': 'Ana', 'apellido': 'Pérez', 'carga_maxima_uv': '0'},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Docente.objects.filter(pk='D1').exists())
+
+        response = self.client.post(
+            reverse('insert_docente'),
+            {'id': 'D2', 'nombre': 'Ana', 'apellido': 'Pérez'},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Docente.objects.filter(pk='D2').exists())
 
     def test_class_crud_persists_numeric_fields_and_rejects_negative_values(self):
         response = self.client.post(
@@ -264,6 +294,109 @@ class ScheduleTests(TestCase):
         self.assertEqual(list(Horario.objects.all()), [existing])
         self.assertTrue(
             any('capacidad adecuada' in str(message) for message in response.context['messages']),
+        )
+
+    def test_schedule_prioritizes_teacher_preferences_and_respects_uv_limit(self):
+        alta = Docente.objects.create(
+            id='OBED',
+            nombre='Obed',
+            apellido='Contreras',
+            carga_maxima_uv=5,
+        )
+        media = Docente.objects.create(
+            id='JORGE',
+            nombre='Jorge',
+            apellido='Pérez',
+            carga_maxima_uv=10,
+        )
+        for index in range(1, 3):
+            Aula.objects.create(
+                idAula=f'A{index}',
+                nombreAula=f'Aula {index}',
+                tipo=Aula.Tipo.AULA,
+                capacidad=30,
+            )
+        clases = [
+            Clase.objects.create(
+                id=f'C{index}',
+                clase=f'Programación {index}',
+                uv=5,
+                cantidadEM=20,
+            )
+            for index in range(1, 3)
+        ]
+        for clase in clases:
+            PreferenciaDocenteClase.objects.create(
+                docente=alta,
+                clase=clase,
+                prioridad=PreferenciaDocenteClase.Prioridad.ALTA,
+            )
+            PreferenciaDocenteClase.objects.create(
+                docente=media,
+                clase=clase,
+                prioridad=PreferenciaDocenteClase.Prioridad.MEDIA,
+            )
+
+        response = self.client.get(reverse('generarHorario'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            Horario.objects.get(idClase=clases[0]).idDocente_id,
+            alta.pk,
+        )
+        self.assertEqual(
+            Horario.objects.get(idClase=clases[1]).idDocente_id,
+            media.pk,
+        )
+        alta.refresh_from_db()
+        media.refresh_from_db()
+        self.assertEqual(alta.carga_academica_actual, 5)
+        self.assertEqual(media.carga_academica_actual, 5)
+
+        teacher_list = self.client.get(reverse('formDocente'))
+        docente_en_lista = next(
+            docente
+            for docente in teacher_list.context['lista']
+            if docente.pk == alta.pk
+        )
+        self.assertEqual(docente_en_lista.carga_academica_actual, 5)
+
+    def test_schedule_preserves_existing_assignments_when_teacher_uv_limit_blocks_a_class(self):
+        docente = Docente.objects.create(
+            id='D1',
+            nombre='Ana',
+            apellido='Pérez',
+            carga_maxima_uv=5,
+        )
+        aula = Aula.objects.create(
+            idAula='A1',
+            nombreAula='Aula 1',
+            tipo=Aula.Tipo.AULA,
+            capacidad=30,
+        )
+        primera = Clase.objects.create(id='C1', clase='Clase 1', uv=5, cantidadEM=20)
+        segunda = Clase.objects.create(id='C2', clase='Clase 2', uv=5, cantidadEM=20)
+        PreferenciaDocenteClase.objects.create(
+            docente=docente,
+            clase=primera,
+            prioridad=PreferenciaDocenteClase.Prioridad.ALTA,
+        )
+        PreferenciaDocenteClase.objects.create(
+            docente=docente,
+            clase=segunda,
+            prioridad=PreferenciaDocenteClase.Prioridad.ALTA,
+        )
+        existing = Horario.objects.create(
+            idClase=primera,
+            idDocente=docente,
+            idAula=aula,
+            hora=7,
+        )
+
+        response = self.client.get(reverse('generarHorario'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(Horario.objects.all()), [existing])
+        self.assertTrue(
+            any('carga académica' in str(message) for message in response.context['messages']),
         )
 
     def test_invalid_hour_filter_returns_a_message_instead_of_an_error(self):

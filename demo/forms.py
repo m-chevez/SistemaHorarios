@@ -15,12 +15,23 @@ class StyledModelForm(forms.ModelForm):
 class DocenteForm(StyledModelForm):
     class Meta:
         model = Docente
-        fields = ('id', 'nombre', 'apellido', 'hora_inicio', 'hora_fin')
+        fields = (
+            'id',
+            'nombre',
+            'apellido',
+            'carga_maxima_uv',
+            'hora_inicio',
+            'hora_fin',
+        )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['carga_maxima_uv'].required = True
         self.fields['hora_inicio'].required = False
         self.fields['hora_fin'].required = False
+        self.fields['carga_maxima_uv'].help_text = (
+            'Límite total de UV que el algoritmo podrá asignar a este docente.'
+        )
 
     def clean(self):
         cleaned = super().clean()
