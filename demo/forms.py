@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 
-from .models import Aula, Clase, Docente
+from .models import Aula, Clase, Docente, PreferenciaDocenteClase
 
 
 class StyledModelForm(forms.ModelForm):
@@ -15,7 +15,31 @@ class StyledModelForm(forms.ModelForm):
 class DocenteForm(StyledModelForm):
     class Meta:
         model = Docente
-        fields = ('id', 'nombre', 'apellido')
+        fields = ('id', 'nombre', 'apellido', 'hora_inicio', 'hora_fin')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['hora_inicio'].required = False
+        self.fields['hora_fin'].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        inicio = cleaned.get('hora_inicio')
+        fin = cleaned.get('hora_fin')
+        if inicio is not None and fin is not None and fin <= inicio:
+            self.add_error('hora_fin', 'La hora de fin debe ser mayor que la hora de inicio.')
+        return cleaned
+
+
+class PreferenciaDocenteClaseForm(StyledModelForm):
+    class Meta:
+        model = PreferenciaDocenteClase
+        fields = ('clase', 'prioridad')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['clase'].widget.attrs['class'] = 'form-select'
+        self.fields['prioridad'].widget.attrs['class'] = 'form-select'
 
 
 class ClaseForm(StyledModelForm):

@@ -3,46 +3,61 @@
 {% block title %}Horario semanal | Sistema de Horarios{% endblock %}
 
 {% block content %}
-  <h1 class="h2 text-center mb-4">Horario semanal</h1>
-  <form method="get" action="{% url 'filtrarHorario' %}" class="card border-0 shadow-sm mb-4">
-    <div class="card-body">
-      <div class="row g-2 align-items-end">
-        <div class="col-sm-6 col-lg"><label class="form-label" for="hora">Hora</label><input id="hora" type="number" min="7" max="18" class="form-control" name="hora" placeholder="7 a 18" value="{{ request.GET.hora }}"></div>
-        <div class="col-sm-6 col-lg"><label class="form-label" for="docente">Docente</label><input id="docente" type="text" class="form-control" name="docente" placeholder="Identidad" value="{{ request.GET.docente }}"></div>
-        <div class="col-sm-6 col-lg"><label class="form-label" for="clase">Clase</label><input id="clase" type="text" class="form-control" name="clase" placeholder="Código" value="{{ request.GET.clase }}"></div>
-        <div class="col-sm-6 col-lg"><label class="form-label" for="aula">Aula</label><input id="aula" type="text" class="form-control" name="aula" placeholder="Código" value="{{ request.GET.aula }}"></div>
-        <div class="col-lg-auto d-flex gap-2">
-          <button type="submit" class="btn btn-primary">Filtrar</button>
-          <a href="{% url 'filtrarHorario' %}" class="btn btn-outline-secondary">Restaurar</a>
-          <button type="submit" formaction="{% url 'descargarHorario' %}" class="btn btn-success">PDF</button>
-        </div>
+<h1 class="h2 text-center mb-4">Horario semanal</h1>
+<form method="get" action="{% url 'filtrarHorario' %}" class="card border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <div class="row g-2 align-items-end">
+      <div class="col-sm-6 col-lg"><label class="form-label" for="hora">Hora</label><input id="hora" type="number"
+          min="7" max="18" class="form-control" name="hora" placeholder="7 a 18" value="{{ request.GET.hora }}"></div>
+      <div class="col-sm-6 col-lg"><label class="form-label" for="docente">Docente</label><input id="docente"
+          type="text" class="form-control" name="docente" placeholder="Identidad" value="{{ request.GET.docente }}">
+      </div>
+      <div class="col-sm-6 col-lg"><label class="form-label" for="clase">Clase</label><input id="clase" type="text"
+          class="form-control" name="clase" placeholder="Código" value="{{ request.GET.clase }}"></div>
+      <div class="col-sm-6 col-lg"><label class="form-label" for="aula">Aula</label><input id="aula" type="text"
+          class="form-control" name="aula" placeholder="Código" value="{{ request.GET.aula }}"></div>
+      <div class="col-lg-auto d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Filtrar</button>
+        <a href="{% url 'filtrarHorario' %}" class="btn btn-outline-secondary">Restaurar</a>
+        <button type="submit" formaction="{% url 'descargarHorario' %}" class="btn btn-danger">PDF</button>
       </div>
     </div>
-  </form>
-  <div class="card border-0 shadow-sm">
-    <div class="table-responsive">
-      <table class="table table-bordered align-middle mb-0">
-        <thead class="table-light"><tr><th>Hora</th><th>Lunes</th><th>Martes</th><th>Miércoles</th><th>Jueves</th><th>Viernes</th></tr></thead>
-        <tbody>
-          {% for hora in horas %}
-            <tr><th scope="row">{{ hora }}:00</th>
-              {% for dia in dias %}
-                <td>
-                  {% for slot in horario %}
-                    {% if slot.hora == hora and slot.idClase.uv > dia %}
-                      <div class="border rounded p-2 mb-2">
-                        <strong>Clase:</strong> {{ slot.idClase.id }} - {{ slot.idClase.clase }}<br>
-                        <strong>Docente:</strong> {{ slot.idDocente.id }} - {{ slot.idDocente.nombre }}<br>
-                        <strong>Aula:</strong> {{ slot.idAula.idAula }} - {{ slot.idAula.nombreAula }}
-                      </div>
-                    {% endif %}
-                  {% endfor %}
-                </td>
-              {% endfor %}
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
   </div>
+</form>
+<div class="card border-0 shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-bordered align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Hora</th>
+          <th>Lunes</th>
+          <th>Martes</th>
+          <th>Miércoles</th>
+          <th>Jueves</th>
+          <th>Viernes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for hora in horas %}
+        <tr>
+          <th scope="row">{{ hora }}:00</th>
+          {% for dia in dias %}
+          <td>
+            {% for slot in horario %}
+            {% if slot.hora == hora and slot.idClase.uv > dia %}
+            <div class="border rounded p-2 mb-2">
+              <strong>Clase:</strong> {{ slot.idClase.id }} - {{ slot.idClase.clase }}<br>
+              <strong>Docente:</strong> {{ slot.idDocente.id }} - {{ slot.idDocente.nombre }} {{ slot.idDocente.apellido }}<br>
+              <strong>Aula:</strong> {{ slot.idAula.idAula }} - {{ slot.idAula.nombreAula }}
+            </div>
+            {% endif %}
+            {% endfor %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endblock %}

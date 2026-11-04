@@ -5,12 +5,14 @@
 {% block content %}
   <div class="row justify-content-center"><div class="col-md-8 col-lg-6">
     <div class="card border-0 shadow-sm"><div class="card-body p-4">
-      <h1 class="h3 mb-3">Agregar docente</h1>
+      <h1 class="h3 mb-1">Agregar docente</h1>
+      <p class="text-secondary mb-3 small">La disponibilidad horaria indica en qué franjas puede recibir clases.</p>
       <form method="post" action="{% url 'insert_docente' %}">
         {% csrf_token %}
         {% for field in form %}
           <div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
             {{ field }}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
             {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
           </div>
         {% endfor %}

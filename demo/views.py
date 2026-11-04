@@ -12,8 +12,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from xhtml2pdf import pisa
 
-from .forms import AulaForm, ClaseForm, DocenteForm, RegistrationForm
-from .models import Aula, Clase, Docente, Horario
+from .forms import AulaForm, ClaseForm, DocenteForm, PreferenciaDocenteClaseForm, RegistrationForm
+from .models import Aula, Clase, Docente, Horario, PreferenciaDocenteClase
 
 
 def index(request):
@@ -152,6 +152,43 @@ def delete_docente(request):
     return redirect('formDocente')
 
 
+# ─── Preferencias de docente ───────────────────────────────────────────────
+
+@login_required
+def preferencias_docente(request, pk):
+    """Lista y gestiona las clases que puede impartir un docente con su prioridad."""
+    docente_obj = get_object_or_404(Docente, pk=pk)
+    preferencias = docente_obj.preferencias_clases.select_related('clase').order_by('prioridad', 'clase__clase')
+    form = PreferenciaDocenteClaseForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        pref = form.save(commit=False)
+        pref.docente = docente_obj
+        # Verificar que no exista ya esa combinación
+        if PreferenciaDocenteClase.objects.filter(docente=docente_obj, clase=pref.clase).exists():
+            messages.error(request, f'Ya existe una preferencia para "{pref.clase}" en este docente.')
+        else:
+            pref.save()
+            messages.success(request, f'Preferencia "{pref.clase}" agregada con prioridad {pref.get_prioridad_display()}.')
+        return redirect('preferencias_docente', pk=pk)
+    return render(request, 'preferencias_docente.html', {
+        'docente': docente_obj,
+        'preferencias': preferencias,
+        'form': form,
+    })
+
+
+@login_required
+@require_POST
+def delete_preferencia_docente(request, pk, pref_pk):
+    docente_obj = get_object_or_404(Docente, pk=pk)
+    pref = get_object_or_404(PreferenciaDocenteClase, pk=pref_pk, docente=docente_obj)
+    pref.delete()
+    messages.success(request, 'Preferencia eliminada.')
+    return redirect('preferencias_docente', pk=pk)
+
+
+# ─── CRUD Clases ───────────────────────────────────────────────────────────
+
 @login_required
 def formClase(request):
     return render(request, 'formClase.html', {'lista': Clase.objects.all()})
@@ -225,6 +262,8 @@ def delete_clase(request):
     return redirect('formClase')
 
 
+# ─── CRUD Aulas ────────────────────────────────────────────────────────────
+
 @login_required
 def aulas(request):
     return render(request, 'aulas.html', {'lista': Aula.objects.all()})
@@ -288,58 +327,103 @@ def confirmar_eliminar_aula(request, pk):
     return redirect('aulas')
 
 
+# ─── Algoritmo de generación de horario ────────────────────────────────────
+
+def _seleccionar_docente(docentes_candidatos, hora, ocupacion):
+    """
+    Dado una lista de candidatos ya ordenada por preferencia/prioridad,
+    devuelve el primer docente disponible en esa hora según su
+    disponibilidad horaria y que no esté ocupado ya en esa franja.
+    """
+    hora_ocupada = ocupacion.get(hora, {})
+    docentes_ocupados = hora_ocupada.get('docentes', set())
+    for docente in docentes_candidatos:
+        if docente.pk in docentes_ocupados:
+            continue
+        if docente.hora_inicio <= hora < docente.hora_fin:
+            return docente
+    return None
+
+
 @login_required
 def generarHorario(request):
-    clases = list(Clase.objects.all())
-    docentes = list(Docente.objects.all())
+    clases = list(Clase.objects.prefetch_related('preferencias_docentes__docente').all())
     aulas_disponibles = list(Aula.objects.all())
+    docentes_todos = list(Docente.objects.prefetch_related('preferencias_clases').all())
 
     if not clases:
         messages.warning(request, 'Primero registra al menos una clase.')
-    elif not docentes or not aulas_disponibles:
+    elif not docentes_todos or not aulas_disponibles:
         messages.error(request, 'Registra al menos un docente y un aula para generar el horario.')
     else:
-        clases.sort(key=lambda clase_obj: (-clase_obj.cantidadEM, clase_obj.pk))
-        asignaciones = []
-        ocupacion = {}
-        clases_sin_espacio = []
+        # Ordenar clases: mayor matrícula primero (clases más demandantes se asignan antes)
+        clases.sort(key=lambda c: (-c.cantidadEM, c.pk))
+
+        # Pre-construir mapa de docentes habilitados por clase, ordenados por prioridad
+        # Si una clase no tiene preferencias configuradas, todos los docentes son candidatos (prioridad neutra)
+        preferencias_map = {}  # clase_pk -> lista de docentes ordenada por prioridad asc
         for clase_obj in clases:
-            for hora in range(7, 19):
-                hora_ocupada = ocupacion.setdefault(
-                    hora,
-                    {'docentes': set(), 'aulas': set()},
-                )
-                docentes_disponibles = [
-                    docente for docente in docentes
-                    if docente.pk not in hora_ocupada['docentes']
-                ]
-                aulas_disponibles_para_clase = [
-                    aula for aula in aulas_disponibles
-                    if aula.pk not in hora_ocupada['aulas']
-                    and aula.capacidad >= clase_obj.cantidadEM
-                ]
-                if docentes_disponibles and aulas_disponibles_para_clase:
-                    docente = random.choice(docentes_disponibles)
-                    aula = random.choice(aulas_disponibles_para_clase)
-                    asignaciones.append(
-                        Horario(
-                            idClase=clase_obj,
-                            idDocente=docente,
-                            idAula=aula,
-                            hora=hora,
-                        ),
-                    )
-                    hora_ocupada['docentes'].add(docente.pk)
-                    hora_ocupada['aulas'].add(aula.pk)
-                    break
+            prefs = list(
+                PreferenciaDocenteClase.objects
+                .filter(clase=clase_obj)
+                .select_related('docente')
+                .order_by('prioridad')
+            )
+            if prefs:
+                # Solo los docentes que tienen preferencia declarada para esa clase
+                preferencias_map[clase_obj.pk] = [p.docente for p in prefs]
             else:
+                # Sin restricciones: todos los docentes son candidatos, en orden aleatorio
+                candidatos = list(docentes_todos)
+                random.shuffle(candidatos)
+                preferencias_map[clase_obj.pk] = candidatos
+
+        asignaciones = []
+        ocupacion = {}  # hora -> {'docentes': set(pk), 'aulas': set(pk)}
+        clases_sin_espacio = []
+
+        for clase_obj in clases:
+            candidatos_docente = preferencias_map[clase_obj.pk]
+            asignado = False
+            for hora in range(7, 19):
+                hora_ocupada = ocupacion.setdefault(hora, {'docentes': set(), 'aulas': set()})
+
+                docente = _seleccionar_docente(candidatos_docente, hora, ocupacion)
+                if docente is None:
+                    continue
+
+                aulas_ok = [
+                    a for a in aulas_disponibles
+                    if a.pk not in hora_ocupada['aulas']
+                    and a.capacidad >= clase_obj.cantidadEM
+                ]
+                if not aulas_ok:
+                    continue
+
+                aula = random.choice(aulas_ok)
+                asignaciones.append(
+                    Horario(
+                        idClase=clase_obj,
+                        idDocente=docente,
+                        idAula=aula,
+                        hora=hora,
+                    )
+                )
+                hora_ocupada['docentes'].add(docente.pk)
+                hora_ocupada['aulas'].add(aula.pk)
+                asignado = True
+                break
+
+            if not asignado:
                 clases_sin_espacio.append(clase_obj)
 
         if clases_sin_espacio:
+            nombres = ', '.join(str(c) for c in clases_sin_espacio)
             messages.error(
                 request,
-                'No hay suficientes docentes, espacios horarios o aulas con capacidad '
-                f'adecuada para asignar {len(clases_sin_espacio)} clase(s).',
+                f'No se pudo asignar {len(clases_sin_espacio)} clase(s): {nombres}. '
+                'No hay suficientes docentes disponibles, aulas con capacidad adecuada '
+                'o espacios horarios libres para completar la asignación.',
             )
         else:
             with transaction.atomic():
