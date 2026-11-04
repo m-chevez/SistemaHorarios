@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}Censo Estudiantil | Coordinación{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+  <div>
+    <h1 class="h2 fw-bold text-dark mb-1">Censo Estudiantil de Asignaturas</h1>
+    <p class="text-secondary mb-0">Demanda de materias proyectada por los estudiantes para alimentar el Algoritmo Genético.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <form method="post" action="{% url 'censo_cargar_muestra' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-primary" title="Carga 8 estudiantes de muestra con selecciones reales">
+        <i class="bi bi-magic me-1"></i> Cargar Datos de Muestra
+      </button>
+    </form>
+    <a href="{% url 'generarHorario' %}" class="btn btn-success fw-semibold">
+      <i class="bi bi-cpu me-1"></i> Generar Horario con AG
+    </a>
+  </div>
+</div>
+
+<!-- Métricas de Demanda -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+      <div class="d-flex align-items-center gap-3">
+        <div class="bg-primary-subtle text-primary rounded-3 p-3 fs-3">
+          <i class="bi bi-people"></i>
+        </div>
+        <div>
+          <div class="text-muted small">Estudiantes Censados</div>
+          <div class="h3 fw-bold text-primary mb-0">{{ total_estudiantes }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+      <div class="d-flex align-items-center gap-3">
+        <div class="bg-success-subtle text-success rounded-3 p-3 fs-3">
+          <i class="bi bi-journal-bookmark"></i>
+        </div>
+        <div>
+          <div class="text-muted small">Selecciones Totales</div>
+          <div class="h3 fw-bold text-success mb-0">{{ total_registros_censo }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+      <div class="d-flex align-items-center gap-3">
+        <div class="bg-warning-subtle text-warning-emphasis rounded-3 p-3 fs-3">
+          <i class="bi bi-shield-check"></i>
+        </div>
+        <div>
+          <div class="text-muted small">Restricción Prioridad 1</div>
+          <div class="h5 fw-bold text-dark mb-0">Cero Traslapes</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+      <div class="d-flex align-items-center gap-3">
+        <div class="bg-info-subtle text-info-emphasis rounded-3 p-3 fs-3">
+          <i class="bi bi-clock-history"></i>
+        </div>
+        <div>
+          <div class="text-muted small">Horas Tentativas</div>
+          <div class="h5 fw-bold text-dark mb-0">7:00 a 18:00</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Demanda por Asignatura -->
+  <div class="col-lg-5">
+    <div class="card border-0 shadow-sm rounded-4 h-100">
+      <div class="card-header bg-white border-0 pt-4 px-4 pb-2">
+        <h2 class="h5 fw-bold mb-1"><i class="bi bi-bar-chart-line text-primary me-2"></i>Demanda por Asignatura</h2>
+        <p class="text-secondary small mb-0">Cantidad de estudiantes que planean cursar cada materia</p>
+      </div>
+      <div class="card-body p-4">
+        {% if demanda_clases %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr class="small text-secondary">
+                <th>Clase</th>
+                <th class="text-center">UV</th>
+                <th class="text-center">Demanda</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for clase in demanda_clases %}
+              <tr>
+                <td>
+                  <span class="badge bg-secondary-subtle text-secondary me-1">{{ clase.id }}</span>
+                  <strong>{{ clase.clase }}</strong>
+                </td>
+                <td class="text-center">{{ clase.uv }}</td>
+                <td class="text-center">
+                  <span class="badge {% if clase.demanda > 0 %}bg-primary{% else %}bg-light text-muted border{% endif %} px-3 py-2">
+                    {{ clase.demanda }} alumnos
+                  </span>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-muted text-center py-4">No hay clases registradas.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Desglose por Estudiante -->
+  <div class="col-lg-7">
+    <div class="card border-0 shadow-sm rounded-4 h-100">
+      <div class="card-header bg-white border-0 pt-4 px-4 pb-2">
+        <h2 class="h5 fw-bold mb-1"><i class="bi bi-person-lines-fill text-success me-2"></i>Estudiantes y Clases Censadas</h2>
+        <p class="text-secondary small mb-0">Detalle de materias y horarios tentativos solicitados</p>
+      </div>
+      <div class="card-body p-4">
+        {% if estudiantes %}
+        <div class="accordion accordion-flush" id="accordionEstudiantes">
+          {% for est in estudiantes %}
+          <div class="accordion-item border rounded-3 mb-2 shadow-xs">
+            <h2 class="accordion-header" id="heading{{ est.numero_cuenta }}">
+              <button class="accordion-button collapsed py-3" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ est.numero_cuenta }}" aria-expanded="false" aria-controls="collapse{{ est.numero_cuenta }}">
+                <div class="d-flex justify-content-between align-items-center w-100 me-3">
+                  <div>
+                    <span class="fw-bold text-dark">{{ est.nombre }}</span>
+                    <span class="badge bg-light text-secondary border ms-2">{{ est.numero_cuenta }}</span>
+                  </div>
+                  <span class="badge bg-primary-subtle text-primary">
+                    {{ est.censo.count }} materias
+                  </span>
+                </div>
+              </button>
+            </h2>
+            <div id="collapse{{ est.numero_cuenta }}" class="accordion-collapse collapse" aria-labelledby="heading{{ est.numero_cuenta }}" data-bs-parent="#accordionEstudiantes">
+              <div class="accordion-body bg-light rounded-bottom-3 p-3">
+                <div class="table-responsive">
+                  <table class="table table-sm table-bordered bg-white mb-0">
+                    <thead class="table-light">
+                      <tr class="small text-secondary">
+                        <th>Código</th>
+                        <th>Asignatura</th>
+                        <th class="text-center">UV</th>
+                        <th class="text-center">Hora Tentativa Solicitada</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for c in est.censo.all %}
+                      <tr>
+                        <td>{{ c.clase.id }}</td>
+                        <td>{{ c.clase.clase }}</td>
+                        <td class="text-center">{{ c.clase.uv }}</td>
+                        <td class="text-center">
+                          <span class="badge bg-info-subtle text-info-emphasis">
+                            <i class="bi bi-clock me-1"></i>{{ c.hora_tentativa }}:00
+                          </span>
+                        </td>
+                      </tr>
+                      {% empty %}
+                      <tr>
+                        <td colspan="4" class="text-center text-muted">Sin materias registradas aún.</td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-secondary">
+          <i class="bi bi-people fs-1 d-block mb-2 text-muted"></i>
+          <p class="mb-2">No hay estudiantes registrados en el censo todavía.</p>
+          <small class="text-muted">Los estudiantes pueden identificarse desde el Portal de Estudiantes, o puedes pulsar el botón "Cargar Datos de Muestra" para poblar ejemplos.</small>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

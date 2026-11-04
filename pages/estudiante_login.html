@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Identificación de Estudiante | Censo Académico{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <div class="card border-0 shadow-sm rounded-4">
+      <div class="card-header bg-white border-0 pt-4 px-4 pb-0">
+        <ul class="nav nav-pills nav-fill">
+          <li class="nav-item">
+            <a class="nav-link text-secondary" href="{% url 'login' %}">
+              <i class="bi bi-shield-lock me-1"></i> Coordinador
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link active fw-semibold" href="{% url 'estudiante_login' %}">
+              <i class="bi bi-mortarboard me-1"></i> Estudiante (Censo)
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div class="card-body p-4 p-md-5">
+        <div class="text-center mb-4">
+          <div class="bg-primary-subtle text-primary rounded-circle d-inline-flex p-3 mb-2">
+            <i class="bi bi-person-badge fs-2"></i>
+          </div>
+          <h1 class="h4 fw-bold">Censo de Asignaturas</h1>
+          <p class="text-secondary small mb-0">
+            Identifícate con tu <strong>Número de Cuenta</strong> y <strong>Nombre Completo</strong> para registrar las clases que planeas llevar y sugerir tus horarios preferidos.
+          </p>
+        </div>
+
+        <form method="post" action="{% url 'estudiante_login' %}">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold small" for="id_numero_cuenta">Número de Cuenta</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-card-heading"></i></span>
+              {{ form.numero_cuenta }}
+            </div>
+            {% if form.numero_cuenta.errors %}
+            <div class="text-danger small mt-1">{{ form.numero_cuenta.errors.0 }}</div>
+            {% endif %}
+            <div class="form-text small">Ingresa tu número de cuenta universitario (ej. 20211001234).</div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label fw-semibold small" for="id_nombre">Nombre Completo</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-person"></i></span>
+              {{ form.nombre }}
+            </div>
+            {% if form.nombre.errors %}
+            <div class="text-danger small mt-1">{{ form.nombre.errors.0 }}</div>
+            {% endif %}
+            <div class="form-text small">Nombres y apellidos completos.</div>
+          </div>
+
+          <button class="btn btn-primary w-100 py-2 fw-semibold" type="submit">
+            <i class="bi bi-arrow-right-circle me-1"></i> Ingresar al Censo
+          </button>
+        </form>
+
+        <div class="mt-4 p-3 bg-light rounded-3 small text-secondary">
+          <i class="bi bi-info-circle text-primary me-1"></i>
+          <strong>¿Para qué sirve el censo?</strong>
+          La información recopilada se utiliza directamente por el <em>Algoritmo Genético</em> de la carrera para evitar que tus clases choquen a la misma hora en la generación del horario oficial.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

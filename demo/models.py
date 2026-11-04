@@ -149,3 +149,60 @@ class PreferenciaDocenteClase(models.Model):
 
     def __str__(self):
         return f'{self.docente} - {self.clase} ({self.get_prioridad_display()})'
+
+
+class Estudiante(models.Model):
+    numero_cuenta = models.CharField(
+        max_length=30,
+        primary_key=True,
+        verbose_name='Número de cuenta',
+    )
+    nombre = models.CharField(
+        max_length=150,
+        verbose_name='Nombre completo',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('numero_cuenta',)
+        verbose_name = 'estudiante'
+        verbose_name_plural = 'estudiantes'
+
+    def __str__(self):
+        return f'{self.numero_cuenta} - {self.nombre}'
+
+
+class CensoEstudiante(models.Model):
+    estudiante = models.ForeignKey(
+        Estudiante,
+        on_delete=models.CASCADE,
+        related_name='censo',
+        verbose_name='Estudiante',
+    )
+    clase = models.ForeignKey(
+        Clase,
+        on_delete=models.CASCADE,
+        related_name='censo_estudiantes',
+        verbose_name='Clase',
+    )
+    hora_tentativa = models.PositiveSmallIntegerField(
+        default=8,
+        validators=(MinValueValidator(7), MaxValueValidator(18)),
+        verbose_name='Hora tentativa',
+        help_text='Hora preferida por el estudiante para cursar la clase (7 a 18).',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('estudiante', 'clase__clase')
+        constraints = (
+            models.UniqueConstraint(
+                fields=('estudiante', 'clase'),
+                name='unique_censo_estudiante_clase',
+            ),
+        )
+        verbose_name = 'censo de estudiante'
+        verbose_name_plural = 'censos de estudiantes'
+
+    def __str__(self):
+        return f'{self.estudiante.nombre} - {self.clase.clase} ({self.hora_tentativa}:00)'

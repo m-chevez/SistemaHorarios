@@ -1,32 +1,92 @@
 {% extends "base.html" %}
 
-{% block title %}Inicio | Sistema de Horarios{% endblock %}
+{% block title %}Inicio | Panel de Coordinación{% endblock %}
 
 {% block content %}
-  <div class="mb-4">
-    <h1 class="h2">Opciones del sistema</h1>
-    <p class="text-secondary mb-0">Selecciona una sección para administrar o generar horarios.</p>
+<div class="mb-4 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+  <div>
+    <h1 class="h2 fw-bold text-dark mb-1">Panel de Coordinación Académica</h1>
+    <p class="text-secondary mb-0">Administra los recursos de la carrera y genera horarios mediante el Algoritmo Genético.</p>
   </div>
-  <div class="row g-3">
-    <div class="col-md-6 col-xl-3">
-      <a class="card h-100 text-decoration-none shadow-sm" href="{% url 'formDocente' %}">
-        <div class="card-body"><h2 class="h5 text-primary">Docentes</h2><p class="text-secondary mb-0">Gestionar el personal docente.</p></div>
-      </a>
-    </div>
-    <div class="col-md-6 col-xl-3">
-      <a class="card h-100 text-decoration-none shadow-sm" href="{% url 'formClase' %}">
-        <div class="card-body"><h2 class="h5 text-primary">Clases</h2><p class="text-secondary mb-0">Administrar clases y matrícula.</p></div>
-      </a>
-    </div>
-    <div class="col-md-6 col-xl-3">
-      <a class="card h-100 text-decoration-none shadow-sm" href="{% url 'aulas' %}">
-        <div class="card-body"><h2 class="h5 text-primary">Aulas</h2><p class="text-secondary mb-0">Administrar aulas y laboratorios.</p></div>
-      </a>
-    </div>
-    <div class="col-md-6 col-xl-3">
-      <a class="card h-100 text-decoration-none shadow-sm" href="{% url 'generarHorario' %}">
-        <div class="card-body"><h2 class="h5 text-primary">Horario</h2><p class="text-secondary mb-0">Generar y consultar el horario semanal.</p></div>
-      </a>
-    </div>
+  <a href="{% url 'generarHorario' %}" class="btn btn-success fw-semibold px-4 py-2 shadow-sm">
+    <i class="bi bi-cpu me-1"></i> Generar Horario con AG
+  </a>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6 col-xl-4">
+    <a class="card h-100 text-decoration-none shadow-sm rounded-4 border-0 hover-shadow" href="{% url 'formDocente' %}">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div class="bg-primary-subtle text-primary rounded-3 p-3 fs-3">
+            <i class="bi bi-person-video3"></i>
+          </div>
+          <span class="badge bg-light text-primary border fs-6">{{ docentes_count }} registrados</span>
+        </div>
+        <h2 class="h5 fw-bold text-dark mb-1">Docentes</h2>
+        <p class="text-secondary small mb-0">Gestionar docentes, horarios de disponibilidad, carga máxima de UV y preferencias de asignación.</p>
+      </div>
+    </a>
   </div>
+
+  <div class="col-md-6 col-xl-4">
+    <a class="card h-100 text-decoration-none shadow-sm rounded-4 border-0 hover-shadow" href="{% url 'formClase' %}">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div class="bg-primary-subtle text-primary rounded-3 p-3 fs-3">
+            <i class="bi bi-book"></i>
+          </div>
+          <span class="badge bg-light text-primary border fs-6">{{ clases_count }} materias</span>
+        </div>
+        <h2 class="h5 fw-bold text-dark mb-1">Clases</h2>
+        <p class="text-secondary small mb-0">Administrar el catálogo de asignaturas, unidades valorativas (UV) y estudiantes matriculados.</p>
+      </div>
+    </a>
+  </div>
+
+  <div class="col-md-6 col-xl-4">
+    <a class="card h-100 text-decoration-none shadow-sm rounded-4 border-0 hover-shadow" href="{% url 'aulas' %}">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div class="bg-primary-subtle text-primary rounded-3 p-3 fs-3">
+            <i class="bi bi-door-open"></i>
+          </div>
+          <span class="badge bg-light text-primary border fs-6">{{ aulas_count }} espacios</span>
+        </div>
+        <h2 class="h5 fw-bold text-dark mb-1">Aulas y Laboratorios</h2>
+        <p class="text-secondary small mb-0">Gestionar aulas físicas, laboratorios de computación y capacidades de cupos.</p>
+      </div>
+    </a>
+  </div>
+
+  <div class="col-md-6 col-xl-6">
+    <a class="card h-100 text-decoration-none shadow-sm rounded-4 border-0 hover-shadow" href="{% url 'censo_global' %}">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div class="bg-success-subtle text-success rounded-3 p-3 fs-3">
+            <i class="bi bi-people"></i>
+          </div>
+          <span class="badge bg-success-subtle text-success border border-success-subtle fs-6">{{ estudiantes_censo_count }} estudiantes</span>
+        </div>
+        <h2 class="h5 fw-bold text-dark mb-1">Censo Estudiantil (Prioridad 1)</h2>
+        <p class="text-secondary small mb-0">Consultar las clases solicitadas y los horarios tentativos de los estudiantes para prevenir traslapes en la generación del horario.</p>
+      </div>
+    </a>
+  </div>
+
+  <div class="col-md-6 col-xl-6">
+    <a class="card h-100 text-decoration-none shadow-sm rounded-4 border-0 hover-shadow" href="{% url 'filtrarHorario' %}">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div class="bg-info-subtle text-info-emphasis rounded-3 p-3 fs-3">
+            <i class="bi bi-calendar-week"></i>
+          </div>
+          <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle fs-6">{{ horarios_count }} asignaciones</span>
+        </div>
+        <h2 class="h5 fw-bold text-dark mb-1">Horario Académico Semanal</h2>
+        <p class="text-secondary small mb-0">Visualizar la matriz de clases semanal limpia, filtrar por docente/aula/materia y exportar a Excel (.xlsx) o PDF.</p>
+      </div>
+    </a>
+  </div>
+</div>
 {% endblock %}

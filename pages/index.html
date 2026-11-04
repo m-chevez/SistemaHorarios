@@ -3,22 +3,104 @@
 {% block title %}Bienvenido | Sistema de Horarios{% endblock %}
 
 {% block content %}
-  <section class="row justify-content-center py-5">
-    <div class="col-lg-8">
-      <div class="card border-0 shadow-sm">
-        <div class="card-body p-4 p-md-5 text-center">
-          <h1 class="display-5 fw-bold">Sistema de Horarios</h1>
-          <p class="lead text-secondary mt-3">
-            Administra docentes, aulas y clases, y organiza tus horarios académicos desde un solo lugar.
-          </p>
-          {% if request.user.is_authenticated %}
-            <a href="{% url 'home' %}" class="btn btn-primary btn-lg mt-3">Ir al sistema</a>
-          {% else %}
-            <a href="{% url 'login' %}" class="btn btn-primary btn-lg mt-3">Iniciar sesión</a>
-            <a href="{% url 'registrarUsuario' %}" class="btn btn-outline-primary btn-lg mt-3 ms-2">Crear cuenta</a>
-          {% endif %}
+<section class="py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+      <div class="card border-0 shadow-sm p-4 p-md-5 mb-4 text-center bg-white rounded-4">
+        <span class="badge bg-primary-subtle text-primary fw-semibold px-3 py-2 align-self-center mb-3">
+          <i class="bi bi-cpu me-1"></i> Optimización Combinatoria con Algoritmo Genético
+        </span>
+        <h1 class="display-5 fw-bold text-dark">Sistema de Gestión y Generación de Horarios</h1>
+        <p class="lead text-secondary mt-2 mb-4 mx-auto" style="max-width: 720px;">
+          Plataforma académica integral con recolección de censo estudiantil y generación automática de horarios optimizados sin traslapes.
+        </p>
+
+        <div class="row g-4 text-start justify-content-center mt-2">
+          <!-- Tarjeta Estudiante -->
+          <div class="col-md-6 col-lg-5">
+            <div class="card h-100 border-2 border-primary-subtle shadow-sm rounded-4 hover-shadow">
+              <div class="card-body p-4 d-flex flex-column">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                  <div class="bg-primary text-white rounded-3 p-3 fs-3 d-flex align-items-center justify-content-center" style="width: 56px; height: 56px;">
+                    <i class="bi bi-mortarboard"></i>
+                  </div>
+                  <div>
+                    <h2 class="h5 mb-0 fw-bold">Portal del Estudiante</h2>
+                    <small class="text-muted">Censo de Clases</small>
+                  </div>
+                </div>
+                <p class="text-secondary small flex-grow-1">
+                  Identifícate con tu <strong>Número de Cuenta</strong> y <strong>Nombre</strong> para seleccionar las asignaturas que planeas matricular y sugerir tus horarios preferidos.
+                </p>
+                {% if request.session.estudiante_cuenta %}
+                <a href="{% url 'estudiante_censo' %}" class="btn btn-primary w-100 py-2 fw-semibold">
+                  <i class="bi bi-arrow-right-circle me-1"></i> Continuar a mi Censo
+                </a>
+                {% else %}
+                <a href="{% url 'estudiante_login' %}" class="btn btn-primary w-100 py-2 fw-semibold">
+                  <i class="bi bi-box-arrow-in-right me-1"></i> Ingresar al Censo Estudiantil
+                </a>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Tarjeta Coordinador -->
+          <div class="col-md-6 col-lg-5">
+            <div class="card h-100 border shadow-sm rounded-4">
+              <div class="card-body p-4 d-flex flex-column">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                  <div class="bg-dark text-white rounded-3 p-3 fs-3 d-flex align-items-center justify-content-center" style="width: 56px; height: 56px;">
+                    <i class="bi bi-shield-lock"></i>
+                  </div>
+                  <div>
+                    <h2 class="h5 mb-0 fw-bold">Coordinador de Carrera</h2>
+                    <small class="text-muted">Administración y Generación</small>
+                  </div>
+                </div>
+                <p class="text-secondary small flex-grow-1">
+                  Gestiona docentes, aulas y materias, consulta las demandas del censo y genera el horario oficial semanal con el Algoritmo Genético.
+                </p>
+                {% if request.user.is_authenticated %}
+                <a href="{% url 'home' %}" class="btn btn-outline-dark w-100 py-2 fw-semibold">
+                  <i class="bi bi-speedometer2 me-1"></i> Panel de Coordinación
+                </a>
+                {% else %}
+                <div class="d-flex gap-2">
+                  <a href="{% url 'login' %}" class="btn btn-dark flex-grow-1 py-2 fw-semibold">
+                    <i class="bi bi-box-arrow-in-right me-1"></i> Iniciar Sesión
+                  </a>
+                  <a href="{% url 'registrarUsuario' %}" class="btn btn-outline-secondary py-2">
+                    Registrarse
+                  </a>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Métricas Rápidas -->
+        <div class="row g-3 justify-content-center mt-4 pt-3 border-top">
+          <div class="col-6 col-md-3">
+            <div class="text-muted small">Docentes Registrados</div>
+            <div class="h4 fw-bold text-primary mb-0">{{ total_docentes }}</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted small">Clases Disponibles</div>
+            <div class="h4 fw-bold text-primary mb-0">{{ total_clases }}</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted small">Aulas y Labs</div>
+            <div class="h4 fw-bold text-primary mb-0">{{ total_aulas }}</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted small">Estudiantes en Censo</div>
+            <div class="h4 fw-bold text-success mb-0">{{ total_estudiantes_censo }}</div>
+          </div>
         </div>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 {% endblock %}

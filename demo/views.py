@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Sum, Value
+from django.db.models import Count, Sum, Value
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -14,13 +14,50 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from xhtml2pdf import pisa
 
-from .forms import AulaForm, ClaseForm, DocenteForm, PreferenciaDocenteClaseForm, RegistrationForm
-from .models import Aula, Clase, Docente, Horario, PreferenciaDocenteClase
+from .excel_export import generar_excel_horario
+from .forms import (
+    AulaForm,
+    CensoEstudianteForm,
+    ClaseForm,
+    DocenteForm,
+    EstudianteIdentificacionForm,
+    PreferenciaDocenteClaseForm,
+    RegistrationForm,
+)
+from .genetic_algorithm import (
+    AulaData,
+    CensoEntry,
+    ClaseData,
+    DocenteData,
+    GeneticScheduleOptimizer,
+)
+from .models import (
+    Aula,
+    CensoEstudiante,
+    Clase,
+    Docente,
+    Estudiante,
+    Horario,
+    PreferenciaDocenteClase,
+)
 
 
 def index(request):
-    return render(request, 'index.html')
+    total_docentes = Docente.objects.count()
+    total_clases = Clase.objects.count()
+    total_aulas = Aula.objects.count()
+    total_estudiantes_censo = Estudiante.objects.count()
+    total_horarios = Horario.objects.count()
+    return render(request, 'index.html', {
+        'total_docentes': total_docentes,
+        'total_clases': total_clases,
+        'total_aulas': total_aulas,
+        'total_estudiantes_censo': total_estudiantes_censo,
+        'total_horarios': total_horarios,
+    })
 
+
+# ─── Autenticación de Coordinador ──────────────────────────────────────────
 
 def login_view(request):
     if request.user.is_authenticated:
@@ -36,7 +73,7 @@ def login_view(request):
         user = authenticate(request, username=username, password=password)
         if user is not None:
             login(request, user)
-            messages.success(request, 'Sesión iniciada correctamente.')
+            messages.success(request, f'Bienvenido(a), {user.email or user.username}.')
             if url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
                 return redirect(next_url)
             return redirect('home')
@@ -52,7 +89,7 @@ def iniciar(request):
 @require_POST
 def cerrar_sesion(request):
     logout(request)
-    messages.success(request, 'Sesión cerrada correctamente.')
+    messages.success(request, 'Sesión de coordinador cerrada correctamente.')
     return redirect('index')
 
 
@@ -68,7 +105,7 @@ def registrarUsuario(request):
             email=email,
             password=form.cleaned_data['password'],
         )
-        messages.success(request, 'Cuenta creada. Ya puedes iniciar sesión.')
+        messages.success(request, 'Cuenta de coordinador creada. Ya puedes iniciar sesión.')
         return redirect('login')
 
     if request.method == 'POST':
@@ -76,10 +113,202 @@ def registrarUsuario(request):
     return render(request, 'registrarUsuario.html', {'form': form})
 
 
+# ─── Portal de Estudiantes y Censo ─────────────────────────────────────────
+
+def estudiante_login(request):
+    """Inicio de sesión e identificación de estudiantes con Cuenta y Nombre."""
+    if request.session.get('estudiante_cuenta'):
+        return redirect('estudiante_censo')
+
+    form = EstudianteIdentificacionForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        cuenta = form.cleaned_data['numero_cuenta']
+        nombre = form.cleaned_data['nombre']
+
+        estudiante, created = Estudiante.objects.get_or_create(
+            numero_cuenta=cuenta,
+            defaults={'nombre': nombre},
+        )
+        if not created and estudiante.nombre != nombre:
+            estudiante.nombre = nombre
+            estudiante.save(update_fields=['nombre'])
+
+        request.session['estudiante_cuenta'] = estudiante.numero_cuenta
+        request.session['estudiante_nombre'] = estudiante.nombre
+
+        if created:
+            messages.success(request, f'¡Bienvenido(a) {nombre}! Tu registro ha sido creado. Ingresa tus clases para el censo.')
+        else:
+            messages.success(request, f'¡Hola de nuevo, {nombre}! Puedes revisar y actualizar tus clases del censo.')
+        return redirect('estudiante_censo')
+
+    return render(request, 'estudiante_login.html', {'form': form})
+
+
+def estudiante_logout(request):
+    """Cierra la sesión del estudiante."""
+    request.session.pop('estudiante_cuenta', None)
+    request.session.pop('estudiante_nombre', None)
+    messages.success(request, 'Sesión de estudiante finalizada.')
+    return redirect('index')
+
+
+def estudiante_censo(request):
+    """Panel del estudiante donde registra las clases que planea llevar y sus horas tentativas."""
+    cuenta = request.session.get('estudiante_cuenta')
+    if not cuenta:
+        messages.info(request, 'Por favor identifícate con tu número de cuenta y nombre para ingresar al censo.')
+        return redirect('estudiante_login')
+
+    estudiante = get_object_or_404(Estudiante, pk=cuenta)
+    mis_clases = CensoEstudiante.objects.filter(estudiante=estudiante).select_related('clase')
+
+    form = CensoEstudianteForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        censo_item = form.save(commit=False)
+        censo_item.estudiante = estudiante
+
+        existente = CensoEstudiante.objects.filter(
+            estudiante=estudiante,
+            clase=censo_item.clase,
+        ).first()
+
+        if existente:
+            existente.hora_tentativa = censo_item.hora_tentativa
+            existente.save(update_fields=['hora_tentativa'])
+            messages.success(
+                request,
+                f'Horario tentativo de "{censo_item.clase.clase}" actualizado a las {censo_item.hora_tentativa}:00.',
+            )
+        else:
+            censo_item.save()
+            messages.success(
+                request,
+                f'Clase "{censo_item.clase.clase}" agregada a tu censo (horario sugerido: {censo_item.hora_tentativa}:00).',
+            )
+        return redirect('estudiante_censo')
+
+    # Calcular estadísticas del censo del estudiante
+    total_uv = sum(item.clase.uv for item in mis_clases)
+    clases_ids = [item.clase_id for item in mis_clases]
+
+    # Consultar si ya existe horario oficial generado para sus clases
+    horario_oficial_mis_clases = Horario.objects.filter(
+        idClase_id__in=clases_ids,
+    ).select_related('idClase', 'idDocente', 'idAula').order_by('hora')
+
+    return render(request, 'estudiante_censo.html', {
+        'estudiante': estudiante,
+        'mis_clases': mis_clases,
+        'form': form,
+        'total_uv': total_uv,
+        'horario_oficial': horario_oficial_mis_clases,
+    })
+
+
+@require_POST
+def estudiante_eliminar_clase_censo(request, pk):
+    """Elimina una clase del censo del estudiante."""
+    cuenta = request.session.get('estudiante_cuenta')
+    if not cuenta:
+        return redirect('estudiante_login')
+
+    item = get_object_or_404(CensoEstudiante, pk=pk, estudiante_id=cuenta)
+    nombre_clase = item.clase.clase
+    item.delete()
+    messages.success(request, f'Clase "{nombre_clase}" removida de tu censo.')
+    return redirect('estudiante_censo')
+
+
+# ─── Gestión de Censo para el Coordinador ──────────────────────────────────
+
+@login_required
+def censo_global(request):
+    """Vista del coordinador para supervisar los censos estudiantiles recibidos."""
+    estudiantes = Estudiante.objects.prefetch_related('censo__clase').annotate(
+        total_clases=Count('censo'),
+    ).order_by('-created_at')
+
+    # Demanda agregada por clase
+    demanda_clases = Clase.objects.annotate(
+        demanda=Count('censo_estudiantes'),
+    ).order_by('-demanda', 'clase')
+
+    total_estudiantes = estudiantes.count()
+    total_registros_censo = CensoEstudiante.objects.count()
+
+    return render(request, 'censo_global.html', {
+        'estudiantes': estudiantes,
+        'demanda_clases': demanda_clases,
+        'total_estudiantes': total_estudiantes,
+        'total_registros_censo': total_registros_censo,
+    })
+
+
+@login_required
+@require_POST
+def censo_cargar_datos_prueba(request):
+    """Genera datos de censo de muestra para varios estudiantes para pruebas de optimización."""
+    clases_disponibles = list(Clase.objects.all())
+    if not clases_disponibles:
+        messages.error(request, 'Primero registra clases en el sistema para generar datos de censo.')
+        return redirect('censo_global')
+
+    estudiantes_muestra = [
+        ('20211001001', 'Carlos Mendoza', ['001', '005', '006', '008']),
+        ('20211002002', 'María José López', ['001', '002', '007', '013']),
+        ('20221003003', 'Luis Fernando Torres', ['002', '003', '004', '005']),
+        ('20221004004', 'Andrea Sofía Castro', ['006', '007', '010', '014']),
+        ('20231005005', 'Kevin David Ramos', ['003', '004', '012', '013']),
+        ('20231006006', 'Valeria Nicole Paz', ['005', '006', '014', '008']),
+        ('20201007007', 'Gabriel Antonio Ruiz', ['001', '007', '010', '012']),
+        ('20221008008', 'Daniela Alejandra Meza', ['002', '008', '013', '014']),
+    ]
+
+    clases_dict = {c.id: c for c in clases_disponibles}
+    horas_preferidas_posibles = [7, 8, 9, 10, 11, 13, 14, 15, 16]
+
+    creados_count = 0
+    for cuenta, nombre, codigos in estudiantes_muestra:
+        estudiante, _ = Estudiante.objects.get_or_create(
+            numero_cuenta=cuenta,
+            defaults={'nombre': nombre},
+        )
+        for cod in codigos:
+            if cod in clases_dict:
+                clase_obj = clases_dict[cod]
+                hora_tentativa = random.choice(horas_preferidas_posibles)
+                _, created = CensoEstudiante.objects.get_or_create(
+                    estudiante=estudiante,
+                    clase=clase_obj,
+                    defaults={'hora_tentativa': hora_tentativa},
+                )
+                if created:
+                    creados_count += 1
+
+    messages.success(request, f'Se cargaron con éxito datos de censo de prueba ({creados_count} selecciones de materias registradas).')
+    return redirect('censo_global')
+
+
+# ─── Panel Principal de Coordinador ────────────────────────────────────────
+
 @login_required
 def home(request):
-    return render(request, 'home.html')
+    docentes_count = Docente.objects.count()
+    clases_count = Clase.objects.count()
+    aulas_count = Aula.objects.count()
+    estudiantes_censo_count = Estudiante.objects.count()
+    horarios_count = Horario.objects.count()
+    return render(request, 'home.html', {
+        'docentes_count': docentes_count,
+        'clases_count': clases_count,
+        'aulas_count': aulas_count,
+        'estudiantes_censo_count': estudiantes_censo_count,
+        'horarios_count': horarios_count,
+    })
 
+
+# ─── CRUD Docentes ─────────────────────────────────────────────────────────
 
 @login_required
 def formDocente(request):
@@ -171,7 +400,6 @@ def preferencias_docente(request, pk):
     if request.method == 'POST' and form.is_valid():
         pref = form.save(commit=False)
         pref.docente = docente_obj
-        # Verificar que no exista ya esa combinación
         if PreferenciaDocenteClase.objects.filter(docente=docente_obj, clase=pref.clase).exists():
             messages.error(request, f'Ya existe una preferencia para "{pref.clase}" en este docente.')
         else:
@@ -335,141 +563,159 @@ def confirmar_eliminar_aula(request, pk):
     return redirect('aulas')
 
 
-# ─── Algoritmo de generación de horario ────────────────────────────────────
-
-def _seleccionar_docente(
-    docentes_candidatos,
-    hora,
-    carga_clase,
-    carga_actual,
-    ocupacion,
-):
-    """
-    Dado una lista de candidatos ya ordenada por preferencia/prioridad,
-    devuelve el primer docente disponible en esa hora según su
-    disponibilidad horaria y que no esté ocupado ya en esa franja.
-    """
-    hora_ocupada = ocupacion.get(hora, {})
-    docentes_ocupados = hora_ocupada.get('docentes', set())
-    for docente in docentes_candidatos:
-        if docente.pk in docentes_ocupados:
-            continue
-        if docente.hora_inicio <= hora < docente.hora_fin:
-            carga_maxima = docente.carga_maxima_uv
-            if carga_maxima is not None and carga_actual.get(docente.pk, 0) + carga_clase > carga_maxima:
-                continue
-            return docente
-    return None
-
+# ─── Algoritmo Genético de Generación de Horarios ──────────────────────────
 
 @login_required
 def generarHorario(request):
-    clases = list(Clase.objects.prefetch_related('preferencias_docentes__docente').all())
-    aulas_disponibles = list(Aula.objects.all())
-    docentes_todos = list(Docente.objects.prefetch_related('preferencias_clases').all())
+    """
+    Ejecuta el Algoritmo Genético de optimización combinatoria multiobjetivo
+    con estricto respeto a la jerarquía de prioridades:
+    1. Traslapes de estudiantes (Censo)
+    2. Horarios y disponibilidad de docentes y aulas
+    3. Carga máxima de UV por docente
+    4. Preferencias de clases por docente (Alta > Media > Baja)
+    """
+    clases_db = list(Clase.objects.all())
+    docentes_db = list(Docente.objects.all())
+    aulas_db = list(Aula.objects.all())
 
-    if not clases:
+    if not clases_db:
         messages.warning(request, 'Primero registra al menos una clase.')
-    elif not docentes_todos or not aulas_disponibles:
+        return redirect('formClase')
+
+    if not docentes_db or not aulas_db:
         messages.error(request, 'Registra al menos un docente y un aula para generar el horario.')
+        return redirect('home')
+
+    # Extraer preferencias
+    preferencias_qs = PreferenciaDocenteClase.objects.all()
+    preferencias_map = {
+        (p.docente_id, p.clase_id): p.prioridad
+        for p in preferencias_qs
+    }
+
+    # Extraer datos del Censo Estudiantil
+    censo_qs = CensoEstudiante.objects.select_related('estudiante').all()
+    censo_entries = [
+        CensoEntry(
+            estudiante_cuenta=c.estudiante_id,
+            estudiante_nombre=c.estudiante.nombre,
+            clase_id=c.clase_id,
+            hora_tentativa=c.hora_tentativa,
+        )
+        for c in censo_qs
+    ]
+
+    # Modelos a estructuras de datos para el optimizador genético
+    clases_data = [
+        ClaseData(id=c.id, nombre=c.clase, uv=c.uv, matricula=c.cantidadEM)
+        for c in clases_db
+    ]
+    docentes_data = [
+        DocenteData(
+            id=d.id,
+            nombre_completo=f'{d.nombre} {d.apellido}',
+            hora_inicio=d.hora_inicio,
+            hora_fin=d.hora_fin,
+            carga_maxima_uv=d.carga_maxima_uv,
+        )
+        for d in docentes_db
+    ]
+    aulas_data = [
+        AulaData(id=a.idAula, nombre=a.nombreAula, capacidad=a.capacidad, tipo=a.tipo)
+        for a in aulas_db
+    ]
+
+    # Ejecutar Algoritmo Genético
+    optimizer = GeneticScheduleOptimizer(
+        clases=clases_data,
+        docentes=docentes_data,
+        aulas=aulas_data,
+        preferencias=preferencias_map,
+        censo=censo_entries,
+        horas_disponibles=list(range(7, 19)),
+        pop_size=80,
+        max_generations=120,
+    )
+
+    try:
+        mejor_cromosoma, diagnostico = optimizer.optimize()
+    except Exception as e:
+        messages.error(request, f'Error al ejecutar el algoritmo genético: {e}')
+        return redirect('filtrarHorario')
+
+    # Mapear diccionarios para reconstrucción
+    clases_map = {c.id: c for c in clases_db}
+    docentes_map = {d.id: d for d in docentes_db}
+    aulas_map = {a.idAula: a for a in aulas_db}
+
+    # Validar que no se violen las restricciones únicas de base de datos
+    asignaciones_a_guardar = []
+    docentes_ocupados_db = set()
+    aulas_ocupadas_db = set()
+    clases_asignadas = set()
+    clases_no_guardadas = []
+
+    for gene in mejor_cromosoma.genes:
+        clase_obj = clases_map.get(gene.clase_id)
+        docente_obj = docentes_map.get(gene.docente_id)
+        aula_obj = aulas_map.get(gene.aula_id)
+
+        if not (clase_obj and docente_obj and aula_obj):
+            continue
+
+        doc_key = (docente_obj.pk, gene.hora)
+        aula_key = (aula_obj.pk, gene.hora)
+
+        if doc_key in docentes_ocupados_db or aula_key in aulas_ocupadas_db or clase_obj.pk in clases_asignadas:
+            # Caso sin solución completa para esta clase debido a colisión física estricta
+            clases_no_guardadas.append(clase_obj.clase)
+            continue
+
+        asignaciones_a_guardar.append(
+            Horario(
+                idClase=clase_obj,
+                idDocente=docente_obj,
+                idAula=aula_obj,
+                hora=gene.hora,
+            )
+        )
+        docentes_ocupados_db.add(doc_key)
+        aulas_ocupadas_db.add(aula_key)
+        clases_asignadas.add(clase_obj.pk)
+
+    # Notificaciones según diagnósticos y persistencia
+    clases_sin_asignar = [c.clase for c in clases_db if c.pk not in clases_asignadas]
+    hay_impedimento_recursos = (
+        bool(clases_sin_asignar)
+        or diagnostico.get('exceso_uv_total', 0) > 0
+        or diagnostico.get('violaciones_capacidad_aula', 0) > 0
+    )
+
+    if hay_impedimento_recursos:
+        nombres = ', '.join(clases_sin_asignar) if clases_sin_asignar else 'materias en exceso de carga'
+        messages.error(
+            request,
+            f'No se pudo asignar {len(clases_sin_asignar)} clase(s): {nombres}. '
+            'No hay suficientes docentes disponibles, aulas con capacidad adecuada '
+            'o espacios horarios/carga académica libres para completar la asignación.',
+        )
     else:
-        # Ordenar clases: mayor matrícula primero (clases más demandantes se asignan antes)
-        clases.sort(key=lambda c: (-c.cantidadEM, c.pk))
+        with transaction.atomic():
+            Horario.objects.all().delete()
+            Horario.objects.bulk_create(asignaciones_a_guardar)
+        messages.success(request, 'Horario generado correctamente.')
 
-        # Pre-construir mapa de docentes habilitados por clase, ordenados por prioridad
-        # Si una clase no tiene preferencias configuradas, todos los docentes son candidatos (prioridad neutra)
-        preferencias_map = {}  # clase_pk -> candidatos ordenados por prioridad
-        for clase_obj in clases:
-            prefs = list(
-                PreferenciaDocenteClase.objects
-                .filter(clase=clase_obj)
-                .select_related('docente')
-                .order_by('prioridad')
-            )
-            if prefs:
-                # Mantener los niveles de prioridad y sortear solo los empates.
-                candidatos = []
-                prioridades = sorted({preferencia.prioridad for preferencia in prefs})
-                for prioridad in prioridades:
-                    grupo = [
-                        preferencia.docente
-                        for preferencia in prefs
-                        if preferencia.prioridad == prioridad
-                    ]
-                    random.shuffle(grupo)
-                    candidatos.extend(grupo)
-                preferencias_map[clase_obj.pk] = candidatos
-            else:
-                # Sin restricciones: todos los docentes son candidatos, en orden aleatorio
-                candidatos = list(docentes_todos)
-                random.shuffle(candidatos)
-                preferencias_map[clase_obj.pk] = candidatos
+    # Guardar diagnóstico en sesión para desplegar métricas en la vista
+    request.session['ultimo_diagnostico_ga'] = diagnostico
 
-        asignaciones = []
-        carga_docente = {docente.pk: 0 for docente in docentes_todos}
-        ocupacion = {}  # hora -> {'docentes': set(pk), 'aulas': set(pk)}
-        clases_sin_espacio = []
+    return _render_horario(
+        request,
+        Horario.objects.select_related('idClase', 'idDocente', 'idAula'),
+    )
 
-        for clase_obj in clases:
-            candidatos_docente = preferencias_map[clase_obj.pk]
-            asignado = False
-            for hora in range(7, 19):
-                hora_ocupada = ocupacion.setdefault(hora, {'docentes': set(), 'aulas': set()})
 
-                docente = _seleccionar_docente(
-                    candidatos_docente,
-                    hora,
-                    clase_obj.uv,
-                    carga_docente,
-                    ocupacion,
-                )
-                if docente is None:
-                    continue
-
-                aulas_ok = [
-                    a for a in aulas_disponibles
-                    if a.pk not in hora_ocupada['aulas']
-                    and a.capacidad >= clase_obj.cantidadEM
-                ]
-                if not aulas_ok:
-                    continue
-
-                aula = random.choice(aulas_ok)
-                asignaciones.append(
-                    Horario(
-                        idClase=clase_obj,
-                        idDocente=docente,
-                        idAula=aula,
-                        hora=hora,
-                    )
-                )
-                hora_ocupada['docentes'].add(docente.pk)
-                hora_ocupada['aulas'].add(aula.pk)
-                carga_docente[docente.pk] += clase_obj.uv
-                asignado = True
-                break
-
-            if not asignado:
-                clases_sin_espacio.append(clase_obj)
-
-        if clases_sin_espacio:
-            nombres = ', '.join(str(c) for c in clases_sin_espacio)
-            messages.error(
-                request,
-                f'No se pudo asignar {len(clases_sin_espacio)} clase(s): {nombres}. '
-                'No hay suficientes docentes disponibles, aulas con capacidad adecuada '
-                'o espacios horarios/carga académica libres para completar la asignación.',
-            )
-        else:
-            with transaction.atomic():
-                Horario.objects.all().delete()
-                Horario.objects.bulk_create(asignaciones)
-            messages.success(request, 'Horario generado correctamente.')
-
-    return _render_horario(request, Horario.objects.select_related(
-        'idClase', 'idDocente', 'idAula',
-    ))
-
+# ─── Consultas, Filtros y Renderizado de Horario ───────────────────────────
 
 def _horario_filtrado(request):
     horario = Horario.objects.select_related('idClase', 'idDocente', 'idAula')
@@ -477,41 +723,104 @@ def _horario_filtrado(request):
     if hora:
         try:
             hora_numero = int(hora)
+            if 7 <= hora_numero <= 18:
+                horario = horario.filter(hora=hora_numero)
+            else:
+                messages.error(request, 'La hora debe estar entre 7 y 18.')
+                return horario.none()
         except ValueError:
-            messages.error(request, 'La hora debe ser un número entre 7 y 18.')
+            messages.error(request, 'La hora debe ser un número entero entre 7 y 18.')
             return horario.none()
-        if not 7 <= hora_numero <= 18:
-            messages.error(request, 'La hora debe estar entre 7 y 18.')
-            return horario.none()
-        horario = horario.filter(hora=hora_numero)
 
-    docente = request.GET.get('docente', '').strip()
-    clase = request.GET.get('clase', '').strip()
-    aula = request.GET.get('aula', '').strip()
-    if docente:
-        horario = horario.filter(idDocente_id=docente)
-    if clase:
-        horario = horario.filter(idClase_id=clase)
-    if aula:
-        horario = horario.filter(idAula_id=aula)
+    docente_id = request.GET.get('docente', '').strip()
+    clase_id = request.GET.get('clase', '').strip()
+    aula_id = request.GET.get('aula', '').strip()
+
+    if docente_id:
+        horario = horario.filter(idDocente_id=docente_id)
+    if clase_id:
+        horario = horario.filter(idClase_id=clase_id)
+    if aula_id:
+        horario = horario.filter(idAula_id=aula_id)
+
     return horario
 
 
-@login_required
+def _render_horario(request, horario):
+    diagnostico = request.session.get('ultimo_diagnostico_ga')
+    docentes_filtro = Docente.objects.all()
+    clases_filtro = Clase.objects.all()
+    aulas_filtro = Aula.objects.all()
+
+    return render(
+        request,
+        'horario.html',
+        {
+            'horario': horario,
+            'horas': range(7, 19),
+            'dias': range(5),
+            'diagnostico': diagnostico,
+            'docentes_filtro': docentes_filtro,
+            'clases_filtro': clases_filtro,
+            'aulas_filtro': aulas_filtro,
+            'total_asignaciones': horario.count(),
+        },
+    )
+
+
+from functools import wraps
+from django.urls import reverse
+
+
+def session_usuario_requerida(view_func):
+    """Permite el acceso a Coordinadores autenticados o a Estudiantes con sesión activa."""
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if request.user.is_authenticated or request.session.get('estudiante_cuenta'):
+            return view_func(request, *args, **kwargs)
+        return redirect(f"{reverse('login')}?next={request.path}")
+    return wrapper
+
+
+@session_usuario_requerida
 def filtrarHorario(request):
     return _render_horario(request, _horario_filtrado(request))
 
 
-def _render_horario(request, horario):
-    return render(
-        request,
-        'horario.html',
-        {'horario': horario, 'horas': range(7, 19), 'dias': range(5)},
+# ─── Exportación a Excel y PDF ─────────────────────────────────────────────
+
+@session_usuario_requerida
+def descargarHorarioExcel(request):
+    """Descarga el horario completo o filtrado en formato Excel (.xlsx)."""
+    horarios_qs = _horario_filtrado(request)
+
+    filtros_activos = []
+    if request.GET.get('hora'):
+        filtros_activos.append(f"Hora: {request.GET.get('hora')}:00")
+    if request.GET.get('docente'):
+        docente = Docente.objects.filter(pk=request.GET.get('docente')).first()
+        filtros_activos.append(f"Docente: {docente or request.GET.get('docente')}")
+    if request.GET.get('clase'):
+        clase = Clase.objects.filter(pk=request.GET.get('clase')).first()
+        filtros_activos.append(f"Clase: {clase or request.GET.get('clase')}")
+    if request.GET.get('aula'):
+        aula = Aula.objects.filter(pk=request.GET.get('aula')).first()
+        filtros_activos.append(f"Aula: {aula or request.GET.get('aula')}")
+
+    filtros_str = ', '.join(filtros_activos) if filtros_activos else 'Todos los registros (sin filtros)'
+
+    excel_buffer = generar_excel_horario(horarios_qs, filtros_str=filtros_str)
+    response = HttpResponse(
+        excel_buffer.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
+    response['Content-Disposition'] = 'attachment; filename="horario_academico.xlsx"'
+    return response
 
 
-@login_required
+@session_usuario_requerida
 def descargarHorario(request):
+    """Descarga el horario en formato PDF."""
     html_string = render_to_string(
         'horario_pdf.html',
         {
