@@ -214,7 +214,6 @@
               <th>Aula</th>
               <th class="text-center">Horario</th>
               <th class="text-center">Días</th>
-              <th class="text-center">Matrícula</th>
               <th class="text-center">Censo</th>
             </tr>
           </thead>
@@ -246,7 +245,6 @@
                 <span class="badge bg-secondary-subtle text-secondary">{{ slot.idClase.uv }} días</span>
                 {% endif %}
               </td>
-              <td class="text-center">{{ slot.idClase.cantidadEM }}</td>
               <td class="text-center">
                 {% if slot.censo_count %}
                 <span class="badge bg-info-subtle text-info-emphasis" title="Alumnos en censo que solicitaron esta clase">
@@ -259,7 +257,7 @@
             </tr>
             {% empty %}
             <tr>
-              <td colspan="9" class="text-center text-muted py-5">
+              <td colspan="8" class="text-center text-muted py-5">
                 No hay asignaciones que coincidan con los filtros seleccionados.
               </td>
             </tr>

@@ -43,7 +43,7 @@ class AulaAdmin(admin.ModelAdmin):
 
 @admin.register(Clase)
 class ClaseAdmin(admin.ModelAdmin):
-    list_display = ('id', 'clase', 'uv', 'cantidadEM')
+    list_display = ('id', 'clase', 'uv')
     search_fields = ('id', 'clase')
 
 

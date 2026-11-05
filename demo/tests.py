@@ -1,14 +1,40 @@
+from zipfile import ZipFile
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Aula, Clase, Docente, Horario, PreferenciaDocenteClase
+from .excel_export import generar_excel_horario
+from .models import (
+    Aula,
+    CensoEstudiante,
+    Clase,
+    Docente,
+    Estudiante,
+    Horario,
+    PreferenciaDocenteClase,
+)
 
 
 class LegacyCatalogMigrationTests(TestCase):
-    def test_existing_docentes_and_clases_are_imported_but_aulas_are_not(self):
+    def test_catalog_contains_the_supplied_classes_and_aulas_are_not_imported(self):
         self.assertEqual(Docente.objects.count(), 5)
-        self.assertEqual(Clase.objects.count(), 4)
+        self.assertEqual(Clase.objects.count(), 29)
+        self.assertEqual(
+            set(Clase.objects.values_list('id', flat=True)),
+            {
+                'ISC-101', 'ISC-102', 'ISC-103', 'ISC-204', 'ISC-211',
+                'ISC-321', 'ISC-351', 'ISC-331', 'ISC-333', 'ISC-312',
+                'ISC-341', 'ISC-332', 'ISC-334', 'ISC-305', 'ISC-313',
+                'ISC-306', 'ISC-336', 'ISC-407', 'ISC-414', 'ISC-435',
+                'ISC-437', 'ISC-408', 'ISC-422', 'ISC-442', 'ISC-443',
+                'ISC-409', 'ISC-423', 'ISC-415', 'ISC-445',
+            },
+        )
+        self.assertEqual(
+            (Clase.objects.get(pk='ISC-103').clase, Clase.objects.get(pk='ISC-103').uv),
+            ('Programación Orientada a Objetos', 5),
+        )
         self.assertFalse(Aula.objects.exists())
 
 
@@ -153,11 +179,11 @@ class CatalogCrudTests(TestCase):
     def test_class_crud_persists_numeric_fields_and_rejects_negative_values(self):
         response = self.client.post(
             reverse('insert_clase'),
-            {'id': 'IS-101', 'clase': 'Programación', 'uv': '4', 'cantidadEM': '25'},
+            {'id': 'IS-101', 'clase': 'Programación', 'uv': '4'},
         )
         self.assertRedirects(response, reverse('formClase'))
         clase = Clase.objects.get(pk='IS-101')
-        self.assertEqual((clase.uv, clase.cantidadEM), (4, 25))
+        self.assertEqual(clase.uv, 4)
         self.assertEqual(
             self.client.get(f"{reverse('edit_clase')}?id={clase.pk}").status_code,
             200,
@@ -169,10 +195,11 @@ class CatalogCrudTests(TestCase):
 
         invalid = self.client.post(
             reverse('insert_clase'),
-            {'id': 'IS-102', 'clase': 'Matemática', 'uv': '-1', 'cantidadEM': '-4'},
+            {'id': 'IS-102', 'clase': 'Matemática', 'uv': '-1'},
         )
         self.assertEqual(invalid.status_code, 400)
         self.assertFalse(Clase.objects.filter(pk='IS-102').exists())
+        self.assertNotContains(self.client.get(reverse('formClase')), 'Estudiantes matriculados')
 
     def test_aula_create_update_and_delete(self):
         response = self.client.post(
@@ -228,6 +255,14 @@ class ScheduleTests(TestCase):
         )
         self.client.force_login(self.user)
 
+    def add_censo(self, clase, cantidad=1):
+        for index in range(cantidad):
+            estudiante = Estudiante.objects.create(
+                numero_cuenta=f'{clase.pk}-{index}',
+                nombre=f'Estudiante {clase.pk} {index}',
+            )
+            CensoEstudiante.objects.create(estudiante=estudiante, clase=clase)
+
     def test_schedule_generation_assigns_unique_teachers_and_rooms_per_hour(self):
         Docente.objects.create(id='D1', nombre='Ada', apellido='Lovelace')
         Docente.objects.create(id='D2', nombre='Grace', apellido='Hopper')
@@ -243,12 +278,18 @@ class ScheduleTests(TestCase):
             tipo=Aula.Tipo.AULA,
             capacidad=30,
         )
-        for code in ('C1', 'C2', 'C3'):
-            Clase.objects.create(id=code, clase=f'Clase {code}', uv=3, cantidadEM=20)
+        for code in ('C1', 'C2', 'C3', 'C4'):
+            clase = Clase.objects.create(id=code, clase=f'Clase {code}', uv=3)
+            if code != 'C4':
+                self.add_censo(clase)
 
         response = self.client.get(reverse('generarHorario'))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Horario.objects.count(), 3)
+        self.assertSetEqual(
+            set(Horario.objects.values_list('idClase_id', flat=True)),
+            {'C1', 'C2', 'C3'},
+        )
         for hora in Horario.objects.values_list('hora', flat=True).distinct():
             asignaciones = Horario.objects.filter(hora=hora)
             self.assertEqual(
@@ -262,11 +303,54 @@ class ScheduleTests(TestCase):
         for asignacion in Horario.objects.select_related('idClase', 'idAula'):
             self.assertGreaterEqual(
                 asignacion.idAula.capacidad,
-                asignacion.idClase.cantidadEM,
+                CensoEstudiante.objects.filter(clase=asignacion.idClase).count(),
             )
         pdf_response = self.client.get(reverse('descargarHorario'))
         self.assertEqual(pdf_response.status_code, 200)
         self.assertEqual(pdf_response['Content-Type'], 'application/pdf')
+
+    def test_schedule_requires_census_selections(self):
+        Clase.objects.create(id='C1', clase='Clase C1', uv=3)
+        Docente.objects.create(id='D1', nombre='Ada', apellido='Lovelace')
+        Aula.objects.create(
+            idAula='A1',
+            nombreAula='Aula 1',
+            tipo=Aula.Tipo.AULA,
+            capacidad=30,
+        )
+
+        response = self.client.get(reverse('generarHorario'))
+
+        self.assertRedirects(response, reverse('censo_global'))
+        self.assertFalse(Horario.objects.exists())
+
+    def test_schedule_html_and_excel_omit_legacy_enrollment_column(self):
+        docente = Docente.objects.create(id='D1', nombre='Ada', apellido='Lovelace')
+        aula = Aula.objects.create(
+            idAula='A1',
+            nombreAula='Aula 1',
+            tipo=Aula.Tipo.AULA,
+            capacidad=30,
+        )
+        clase = Clase.objects.create(id='C1', clase='Clase C1', uv=3)
+        horario = Horario.objects.create(
+            idClase=clase,
+            idDocente=docente,
+            idAula=aula,
+            hora=7,
+        )
+
+        response = self.client.get(reverse('filtrarHorario'))
+        self.assertNotContains(response, 'Matrícula')
+
+        excel = generar_excel_horario([horario])
+        with ZipFile(excel) as workbook:
+            xml_content = ''.join(
+                workbook.read(name).decode('utf-8')
+                for name in workbook.namelist()
+                if name.endswith('.xml')
+            )
+        self.assertNotIn('Matriculados', xml_content)
 
     def test_schedule_does_not_replace_existing_schedule_if_room_capacity_is_too_small(self):
         docente = Docente.objects.create(id='D1', nombre='Ada', apellido='Lovelace')
@@ -280,8 +364,8 @@ class ScheduleTests(TestCase):
             id='C1',
             clase='Clase C1',
             uv=3,
-            cantidadEM=25,
         )
+        self.add_censo(clase, cantidad=25)
         existing = Horario.objects.create(
             idClase=clase,
             idDocente=docente,
@@ -321,10 +405,11 @@ class ScheduleTests(TestCase):
                 id=f'C{index}',
                 clase=f'Programación {index}',
                 uv=5,
-                cantidadEM=20,
             )
             for index in range(1, 3)
         ]
+        for clase in clases:
+            self.add_censo(clase)
         for clase in clases:
             PreferenciaDocenteClase.objects.create(
                 docente=alta,
@@ -373,8 +458,10 @@ class ScheduleTests(TestCase):
             tipo=Aula.Tipo.AULA,
             capacidad=30,
         )
-        primera = Clase.objects.create(id='C1', clase='Clase 1', uv=5, cantidadEM=20)
-        segunda = Clase.objects.create(id='C2', clase='Clase 2', uv=5, cantidadEM=20)
+        primera = Clase.objects.create(id='C1', clase='Clase 1', uv=5)
+        segunda = Clase.objects.create(id='C2', clase='Clase 2', uv=5)
+        self.add_censo(primera)
+        self.add_censo(segunda)
         PreferenciaDocenteClase.objects.create(
             docente=docente,
             clase=primera,
@@ -402,4 +489,4 @@ class ScheduleTests(TestCase):
     def test_invalid_hour_filter_returns_a_message_instead_of_an_error(self):
         response = self.client.get(reverse('filtrarHorario'), {'hora': 'tarde'})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['horario'].count(), 0)
+        self.assertEqual(len(response.context['horario']), 0)

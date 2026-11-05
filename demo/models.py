@@ -67,7 +67,6 @@ class Clase(models.Model):
         validators=(MinValueValidator(1),),
         verbose_name='Unidades valorativas',
     )
-    cantidadEM = models.PositiveIntegerField(verbose_name='Estudiantes matriculados')
 
     class Meta:
         ordering = ('id',)

@@ -280,7 +280,6 @@ def generar_excel_horario(horarios_qs: Iterable[Any], filtros_str: str = 'Todos 
         ('Código', 12, table_cell_center_fmt),
         ('Nombre de la Clase', 32, table_cell_fmt),
         ('UV', 8, table_cell_center_fmt),
-        ('Matriculados', 13, table_cell_center_fmt),
         ('Censo (Demanda)', 15, censo_fmt),
         ('Docente Asignado', 28, table_cell_fmt),
         ('Aula', 20, table_cell_fmt),
@@ -306,17 +305,16 @@ def generar_excel_horario(horarios_qs: Iterable[Any], filtros_str: str = 'Todos 
         ws_lista.write(row_idx, 0, slot.idClase.id, table_cell_center_fmt)
         ws_lista.write(row_idx, 1, slot.idClase.clase, table_cell_fmt)
         ws_lista.write(row_idx, 2, slot.idClase.uv, table_cell_center_fmt)
-        ws_lista.write(row_idx, 3, slot.idClase.cantidadEM, table_cell_center_fmt)
-        ws_lista.write(row_idx, 4, censo_total, censo_fmt)
-        ws_lista.write(row_idx, 5, f'{slot.idDocente.nombre} {slot.idDocente.apellido}', table_cell_fmt)
-        ws_lista.write(row_idx, 6, f'{slot.idAula.nombreAula}', table_cell_fmt)
+        ws_lista.write(row_idx, 3, censo_total, censo_fmt)
+        ws_lista.write(row_idx, 4, f'{slot.idDocente.nombre} {slot.idDocente.apellido}', table_cell_fmt)
+        ws_lista.write(row_idx, 5, f'{slot.idAula.nombreAula}', table_cell_fmt)
         ws_lista.write(
-            row_idx, 7,
+            row_idx, 6,
             slot.idAula.get_tipo_display() if hasattr(slot.idAula, 'get_tipo_display') else slot.idAula.tipo,
             table_cell_center_fmt,
         )
-        ws_lista.write(row_idx, 8, hora_str, table_cell_center_fmt)
-        ws_lista.write(row_idx, 9, dias_str, table_cell_center_fmt)
+        ws_lista.write(row_idx, 7, hora_str, table_cell_center_fmt)
+        ws_lista.write(row_idx, 8, dias_str, table_cell_center_fmt)
 
     wb.close()
     output.seek(0)

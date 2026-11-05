@@ -252,7 +252,8 @@ def censo_cargar_datos_prueba(request):
     Genera datos de censo de muestra usando los IDs de clase reales presentes en la BD.
     Crea 12 estudiantes de prueba y les asigna entre 2 y 4 clases con hora tentativa aleatoria.
     """
-    clases_disponibles = list(Clase.objects.all())
+    # solo quiero 12 clases diferentes en total
+    clases_disponibles = list(Clase.objects.all()[:12])
     if not clases_disponibles:
         messages.error(request, 'Primero registra clases en el sistema para generar datos de censo.')
         return redirect('censo_global')
@@ -593,13 +594,16 @@ def generarHorario(request):
     3. Carga máxima de UV por docente
     4. Preferencias de clases por docente (Alta > Media > Baja)
     """
-    clases_db = list(Clase.objects.all())
+    clases_db = list(
+        Clase.objects.annotate(matricula=Count('censo_estudiantes'))
+        .filter(matricula__gt=0)
+    )
     docentes_db = list(Docente.objects.all())
     aulas_db = list(Aula.objects.all())
 
     if not clases_db:
-        messages.warning(request, 'Primero registra al menos una clase.')
-        return redirect('formClase')
+        messages.warning(request, 'Se necesita al menos una clase registrada en el censo estudiantil.')
+        return redirect('censo_global')
 
     if not docentes_db or not aulas_db:
         messages.error(request, 'Registra al menos un docente y un aula para generar el horario.')
@@ -613,7 +617,7 @@ def generarHorario(request):
     }
 
     # Extraer datos del Censo Estudiantil
-    censo_qs = CensoEstudiante.objects.select_related('estudiante').all()
+    censo_qs = CensoEstudiante.objects.select_related('estudiante', 'clase').all()
     censo_entries = [
         CensoEntry(
             estudiante_cuenta=c.estudiante_id,
@@ -626,7 +630,7 @@ def generarHorario(request):
 
     # Modelos a estructuras de datos para el optimizador genético
     clases_data = [
-        ClaseData(id=c.id, nombre=c.clase, uv=c.uv, matricula=c.cantidadEM)
+        ClaseData(id=c.id, nombre=c.clase, uv=c.uv, matricula=c.matricula)
         for c in clases_db
     ]
     docentes_data = [

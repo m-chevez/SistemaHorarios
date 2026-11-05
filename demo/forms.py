@@ -56,7 +56,7 @@ class PreferenciaDocenteClaseForm(StyledModelForm):
 class ClaseForm(StyledModelForm):
     class Meta:
         model = Clase
-        fields = ('id', 'clase', 'uv', 'cantidadEM')
+        fields = ('id', 'clase', 'uv')
 
 
 class AulaForm(StyledModelForm):

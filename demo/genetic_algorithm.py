@@ -384,7 +384,7 @@ class GeneticScheduleOptimizer:
 
     def optimize(self) -> Tuple[ScheduleChromosome, Dict[str, Any]]:
         if not self.clases_list:
-            raise ValueError('No hay clases registradas para programar.')
+            raise ValueError('No hay clases censadas para programar.')
         if not self.docentes_list or not self.aulas_list:
             raise ValueError('Debe existir al menos un docente y un aula registrados.')
 
